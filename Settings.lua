@@ -436,11 +436,21 @@ bopCraftedCheck:SetScript("OnClick", function(self)
     BiSGearCheck:RefreshView()
 end)
 
+local hideFilteredCheck = CreateFrame("CheckButton", "BiSGearCheckSettingsHideFilteredRanks", scrollChild, "UICheckButtonTemplate")
+hideFilteredCheck:SetPoint("TOPLEFT", bopCraftedCheck, "BOTTOMLEFT", 0, 0)
+_G["BiSGearCheckSettingsHideFilteredRanksText"]:SetText("Close rank gaps when filtering (treat #2 as BiS if #1 is filtered)")
+hideFilteredCheck:SetScript("OnClick", function(self)
+    BiSGearCheckSaved.hideFilteredRanks = self:GetChecked() and true or false
+    -- Refresh() re-runs CompareSlot so upgrades + effectiveRank pick up the
+    -- setting change. RefreshView() alone would just re-render stale results.
+    BiSGearCheck:Refresh()
+end)
+
 -- ============================================================
 -- Section: Character Filters
 -- ============================================================
 
-local zoneSectionEnd = CreateSectionEnd(bopCraftedCheck, 0)
+local zoneSectionEnd = CreateSectionEnd(hideFilteredCheck, 0)
 
 local charHeader, charLine = CreateSectionHeader(zoneSectionEnd, "Character Filters")
 
@@ -1008,6 +1018,10 @@ panel:SetScript("OnShow", function(self)
 
     if BiSGearCheckSaved.includeBoPCraftedOther == nil then BiSGearCheckSaved.includeBoPCraftedOther = true end
     bopCraftedCheck:SetChecked(BiSGearCheckSaved.includeBoPCraftedOther)
+
+    -- default off — opt-in, because changes how ranks read
+    if BiSGearCheckSaved.hideFilteredRanks == nil then BiSGearCheckSaved.hideFilteredRanks = false end
+    hideFilteredCheck:SetChecked(BiSGearCheckSaved.hideFilteredRanks)
 
     -- PHASE SELECTION DISABLED
     -- local currentPhase = BiSGearCheckSaved.phaseFilter or 1

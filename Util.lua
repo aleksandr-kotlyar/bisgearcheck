@@ -30,6 +30,17 @@ BiSGearCheck.SlotOrder = {
     "Main Hand", "Offhand", "Twohand", "Ranged"
 }
 
+-- Dual-wield slot pairs. Used to exclude items already equipped in the
+-- paired slot from appearing as upgrades in this slot — e.g. a 1H weapon
+-- equipped in OH shouldn't show up as an MH upgrade. MH-only/OH-only items
+-- (shields, librams, 2H-only weapons) aren't in both slot lists, so this
+-- check naturally respects handedness: only items valid in either slot get
+-- deduped.
+BiSGearCheck.DualWieldPair = {
+    ["Main Hand"] = "Offhand",
+    ["Offhand"]   = "Main Hand",
+}
+
 -- Map class token -> list of spec keys
 BiSGearCheck.ClassSpecs = {
     ["DRUID"]   = {

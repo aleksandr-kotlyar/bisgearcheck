@@ -4,13 +4,17 @@
 BiSGearCheck = BiSGearCheck or {}
 local T = BiSGearCheck.Theme
 
--- Rank text helper (module-level, not per-call)
+-- Rank text helper (module-level, not per-call).
+-- When hideFilteredRanks is on, CompareSlot sets eq.effectiveRank to the
+-- item's rank among unfiltered items — so an equipped #2 with #1 filtered
+-- collapses to "BiS!" here without changing the underlying raw rank.
 local function rankStr(eq)
-    if eq.rank then
-        if eq.rank == 1 then
+    local r = eq.effectiveRank or eq.rank
+    if r then
+        if r == 1 then
             return T.hex("rankBis") .. "BiS!|r"
         else
-            return string.format(T.hex("rankText") .. "Rank %d|r", eq.rank)
+            return string.format(T.hex("rankText") .. "Rank %d|r", r)
         end
     end
     return T.hex("notOnList") .. "Not on list|r"
@@ -275,7 +279,8 @@ function BiSGearCheck:RenderSlotSection(parent, slotResult, yOffset, width)
                 end
             end
 
-            row.text:SetText(string.format("  %s#%d|r %s %s", T.hex("rankNum"), upgrade.rank, itemName, sourceText))
+            local displayRank = upgrade.effectiveRank or upgrade.rank
+            row.text:SetText(string.format("  %s#%d|r %s %s", T.hex("rankNum"), displayRank, itemName, sourceText))
             row.text:SetPoint("RIGHT", row, "RIGHT", -30, 0)
 
             -- Store data on the row for shared handlers

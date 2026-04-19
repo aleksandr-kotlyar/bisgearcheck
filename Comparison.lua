@@ -6,6 +6,7 @@ BiSGearCheck = BiSGearCheck or {}
 -- Reusable scratch tables (avoid per-call allocation)
 local _filteredBuf = {}
 local _equippedIDsBuf = {}
+local _pairedEquippedBuf = {}
 
 -- ============================================================
 -- FACTION FILTERING
@@ -102,6 +103,10 @@ function BiSGearCheck:CompareSlot(slotName, bisItems)
     }
 
     wipe(_equippedIDsBuf)
+    wipe(_pairedEquippedBuf)
+
+    local pairedSlot = self.DualWieldPair and self.DualWieldPair[slotName]
+    local pairedInvSlots = pairedSlot and self.SlotToInvSlot[pairedSlot] or nil
 
     if self:IsViewingOwnCharacter() then
         -- Live equipped gear from the current character
@@ -117,6 +122,12 @@ function BiSGearCheck:CompareSlot(slotName, bisItems)
                 _equippedIDsBuf[itemID] = true
             end
         end
+        if pairedInvSlots then
+            for _, invSlotID in ipairs(pairedInvSlots) do
+                local itemID = GetInventoryItemID("player", invSlotID)
+                if itemID then _pairedEquippedBuf[itemID] = true end
+            end
+        end
     else
         -- Snapshot data from another character
         local charData = self:GetViewingCharData()
@@ -128,6 +139,11 @@ function BiSGearCheck:CompareSlot(slotName, bisItems)
                     invSlot = eqInfo.invSlot,
                 }
                 _equippedIDsBuf[eqInfo.id] = true
+            end
+        end
+        if pairedSlot and charData and charData.equipped and charData.equipped[pairedSlot] then
+            for _, eqInfo in ipairs(charData.equipped[pairedSlot]) do
+                _pairedEquippedBuf[eqInfo.id] = true
             end
         end
     end
@@ -158,11 +174,38 @@ function BiSGearCheck:CompareSlot(slotName, bisItems)
         if cutoff == 999 then cutoff = #bisItems + 1 end
     end
 
+    local hideFiltered = BiSGearCheckSaved and BiSGearCheckSaved.hideFilteredRanks and true or false
+
+    -- When hiding filtered ranks, compute raw→effective rank map so the
+    -- display can show e.g. an equipped #2 as "BiS" when the #1 is filtered.
+    local rawToEffective
+    if hideFiltered then
+        rawToEffective = {}
+        local eff = 0
+        for rank = 1, #bisItems do
+            if not self:GetItemFilterReason(bisItems[rank], self.zoneFilter) then
+                eff = eff + 1
+                rawToEffective[rank] = eff
+            end
+        end
+        for _, eq in ipairs(result.equipped) do
+            if eq.rank then eq.effectiveRank = rawToEffective[eq.rank] end
+        end
+    end
+
     local shown = 0
     for rank = 1, math.min(cutoff - 1, #bisItems) do
         if maxShow and shown >= maxShow then break end
         local bisID = bisItems[rank]
-        if not _equippedIDsBuf[bisID] then
+        -- Skip if equipped in this slot, already equipped in the dual-wield
+        -- paired slot (unique 1H weapons), or filtered by a user-enabled
+        -- category (phase/zone/PvP/etc.) when "skip filtered ranks" is on.
+        local skipThisItem = _equippedIDsBuf[bisID] or _pairedEquippedBuf[bisID]
+        if not skipThisItem and hideFiltered
+           and self:GetItemFilterReason(bisID, self.zoneFilter) then
+            skipThisItem = true
+        end
+        if not skipThisItem then
             local name, link, quality, _, _, _, _, _, _, icon = GetItemInfo(bisID)
             if not name and not self.pendingItems[bisID] then
                 self.pendingItems[bisID] = true
@@ -173,6 +216,7 @@ function BiSGearCheck:CompareSlot(slotName, bisItems)
             result.upgrades[#result.upgrades + 1] = {
                 id = bisID,
                 rank = rank,
+                effectiveRank = rawToEffective and rawToEffective[rank] or nil,
                 name = name,
                 link = link,
                 quality = quality,

@@ -280,4 +280,167 @@ function T.test_run_comparison_with_data()
     assert_equal("Head", BiSGearCheck.comparisonResults[1].slotName)
 end
 
+-- ============================================================
+-- TESTS: MH/OH cross-slot dedup (shared 1H weapons)
+-- ============================================================
+
+function T.test_compare_slot_mh_oh_dedup_unique_1h_in_oh()
+    -- User has a 1H weapon equipped in OH. When we compare MH, we must NOT
+    -- list that weapon as an upgrade — the player can't equip a second copy
+    -- of a unique item, and even for non-unique items they already own it.
+    setupBasicState()
+    BiSGearCheckSources = {
+        [401] = { source = "Karazhan", sourceType = "Boss" },
+        [402] = { source = "Karazhan", sourceType = "Boss" },
+        [403] = { source = "Karazhan", sourceType = "Boss" },
+    }
+    -- MH slot empty, OH holds weapon 401 (rank #1 in both MH and OH lists)
+    MockWoW.SetInventory({
+        [17] = { id = 401, link = "|Hitem:401:0:0:0:0:0|h[BiS 1H]|h" },
+    })
+    MockWoW.SetItemInfo(402, { name = "Second 1H", quality = 4 })
+    MockWoW.SetItemInfo(403, { name = "Third 1H", quality = 4 })
+
+    local result = BiSGearCheck:CompareSlot("Main Hand", { 401, 402, 403 })
+    assert_equal(0, #result.equipped, "MH slot is empty")
+    -- 401 is in OH, must be excluded from MH upgrades. Expect #2 and #3.
+    assert_equal(2, #result.upgrades)
+    assert_equal(402, result.upgrades[1].id)
+    assert_equal(403, result.upgrades[2].id)
+end
+
+function T.test_compare_slot_oh_dedup_when_mh_holds_shared_weapon()
+    -- Mirror case: MH holds the shared 1H, OH slot is empty. The OH upgrades
+    -- list must not show the MH weapon.
+    setupBasicState()
+    BiSGearCheckSources = {
+        [401] = { source = "Karazhan", sourceType = "Boss" },
+        [402] = { source = "Karazhan", sourceType = "Boss" },
+    }
+    MockWoW.SetInventory({
+        [16] = { id = 401, link = "|Hitem:401:0:0:0:0:0|h[BiS 1H]|h" },
+    })
+    MockWoW.SetItemInfo(402, { name = "Second 1H", quality = 4 })
+
+    local result = BiSGearCheck:CompareSlot("Offhand", { 401, 402 })
+    assert_equal(0, #result.equipped, "OH slot is empty")
+    assert_equal(1, #result.upgrades, "401 is already in MH, only 402 remains")
+    assert_equal(402, result.upgrades[1].id)
+end
+
+function T.test_compare_slot_mh_only_items_not_affected_by_oh()
+    -- Handedness: a Main Hand-only item (e.g. a 2H-preferred or MH-exclusive
+    -- 1H that Loon listed under "Main Hand" not "Main Hand~Off Hand") isn't
+    -- in the OH bis list. So having an unrelated OH weapon equipped must
+    -- not affect the MH upgrade list.
+    setupBasicState()
+    BiSGearCheckSources = {
+        [501] = { source = "Karazhan", sourceType = "Boss" },  -- MH-only
+        [502] = { source = "Karazhan", sourceType = "Boss" },  -- MH-only
+        [601] = { source = "Karazhan", sourceType = "Boss" },  -- OH-only
+    }
+    MockWoW.SetInventory({
+        [17] = { id = 601, link = "|Hitem:601:0:0:0:0:0|h[Shield]|h" },
+    })
+    MockWoW.SetItemInfo(501, { name = "Best MH-only", quality = 4 })
+    MockWoW.SetItemInfo(502, { name = "Second MH-only", quality = 4 })
+
+    -- MH list contains only 501, 502 (not 601). OH item should not dedup.
+    local result = BiSGearCheck:CompareSlot("Main Hand", { 501, 502 })
+    assert_equal(2, #result.upgrades, "MH upgrades unaffected by OH-only item")
+    assert_equal(501, result.upgrades[1].id)
+end
+
+-- ============================================================
+-- TESTS: hideFilteredRanks (skip-filtered-items ranking)
+-- ============================================================
+
+function T.test_compare_slot_equipped_number_two_shows_as_bis_when_top_filtered()
+    -- The canonical case from the feature request: #1 is filtered (PvP), user
+    -- has #2. With hideFilteredRanks on, #2's effectiveRank should collapse
+    -- to 1 so the UI renders "BiS!".
+    setupBasicState()
+    BiSGearCheckSaved.includePvP = false
+    BiSGearCheckSaved.hideFilteredRanks = true
+    BiSGearCheckSources = {
+        [201] = { source = "PvP", sourceType = "Honor" },
+        [202] = { source = "Karazhan", sourceType = "Boss" },
+        [203] = { source = "Karazhan", sourceType = "Boss" },
+    }
+    MockWoW.SetInventory({ [1] = { id = 202, link = "|Hitem:202:0:0:0:0:0|h[Helm]|h" } })
+
+    local result = BiSGearCheck:CompareSlot("Head", { 201, 202, 203 })
+    assert_equal(2, result.equipped[1].rank, "raw rank is preserved")
+    assert_equal(1, result.equipped[1].effectiveRank, "effective rank collapses to 1")
+    assert_equal(0, #result.upgrades, "no upgrades — #1 is filtered, #2 is equipped")
+end
+
+function T.test_compare_slot_hide_filtered_off_shows_filtered_items()
+    -- Same setup but hideFilteredRanks OFF — filtered items still appear in
+    -- upgrades (render layer decides whether to hide them). effectiveRank
+    -- must be nil so the display falls back to raw rank.
+    setupBasicState()
+    BiSGearCheckSaved.includePvP = false
+    BiSGearCheckSaved.hideFilteredRanks = false
+    BiSGearCheckSources = {
+        [201] = { source = "PvP", sourceType = "Honor" },
+        [202] = { source = "Karazhan", sourceType = "Boss" },
+    }
+    MockWoW.SetInventory({ [1] = { id = 202, link = "|Hitem:202:0:0:0:0:0|h[Helm]|h" } })
+    MockWoW.SetItemInfo(201, { name = "PvP Helm", quality = 4 })
+
+    local result = BiSGearCheck:CompareSlot("Head", { 201, 202 })
+    assert_equal(1, #result.upgrades, "filtered item still surfaces for render-layer handling")
+    assert_nil(result.upgrades[1].effectiveRank)
+    assert_nil(result.equipped[1].effectiveRank)
+end
+
+function T.test_compare_slot_hide_filtered_dual_slot_rings()
+    -- Rings example: list = {R1, R2, R3, R4}. R2 is filtered (WorldBoss),
+    -- user has R1 + R3. With setting on, upgrades should be empty (R2 is
+    -- filtered, R1/R3 are equipped — nothing left above worstEquipped R3).
+    setupBasicState()
+    BiSGearCheckSaved.includeWorldBoss = false
+    BiSGearCheckSaved.hideFilteredRanks = true
+    BiSGearCheckSources = {
+        [301] = { source = "Karazhan", sourceType = "Boss" },
+        [302] = { source = "World Boss", sourceType = "Doomwalker" },
+        [303] = { source = "Karazhan", sourceType = "Boss" },
+        [304] = { source = "Karazhan", sourceType = "Boss" },
+    }
+    MockWoW.SetInventory({
+        [11] = { id = 301, link = "|Hitem:301:0:0:0:0:0|h[Ring1]|h" },
+        [12] = { id = 303, link = "|Hitem:303:0:0:0:0:0|h[Ring3]|h" },
+    })
+
+    local result = BiSGearCheck:CompareSlot("Rings", { 301, 302, 303, 304 })
+    assert_equal(0, #result.upgrades, "R2 is filtered so nothing above R3 exists as an upgrade")
+    -- Effective ranks: R1→1, R3→2 (R2 filtered out of the count)
+    assert_equal(1, result.equipped[1].effectiveRank)
+    assert_equal(2, result.equipped[2].effectiveRank)
+end
+
+function T.test_compare_slot_hide_filtered_leaves_unfiltered_upgrades_visible()
+    -- When some filtered items exist above equipped but an unfiltered upgrade
+    -- also exists, the upgrade should still be shown with its effective rank.
+    setupBasicState()
+    BiSGearCheckSaved.includePvP = false
+    BiSGearCheckSaved.hideFilteredRanks = true
+    BiSGearCheckSources = {
+        [201] = { source = "PvP", sourceType = "Arena" },       -- filtered
+        [202] = { source = "Karazhan", sourceType = "Boss" },   -- real upgrade
+        [203] = { source = "Karazhan", sourceType = "Boss" },   -- equipped
+    }
+    MockWoW.SetInventory({ [1] = { id = 203, link = "|Hitem:203:0:0:0:0:0|h[Helm]|h" } })
+    MockWoW.SetItemInfo(202, { name = "Good Helm", quality = 4 })
+
+    local result = BiSGearCheck:CompareSlot("Head", { 201, 202, 203 })
+    assert_equal(1, #result.upgrades, "#2 is a genuine upgrade above equipped #3")
+    assert_equal(202, result.upgrades[1].id)
+    assert_equal(2, result.upgrades[1].rank, "raw rank preserved")
+    assert_equal(1, result.upgrades[1].effectiveRank, "effective rank is 1 (#1 filtered)")
+    assert_equal(3, result.equipped[1].rank)
+    assert_equal(2, result.equipped[1].effectiveRank)
+end
+
 return T
