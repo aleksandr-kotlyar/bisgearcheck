@@ -5,6 +5,19 @@ Versioning: **MAJOR.MINOR.PATCH**
 - **MINOR** — New features or significant improvements
 - **PATCH** — Bug fixes, data corrections, small tweaks
 
+## v3.10.0
+
+- **Wishlists as comparison sources**: any wishlist can be opted in via a new "Enable Compare" checkbox on the Wishlists tab, making it selectable in the Compare-tab source dropdown (and optionally contributing to tooltips). Flags live in the same Data Sources settings table as published sources.
+- Wishlist-as-source honors a single spec per wishlist — the **Rename dialog** now includes a "Compare Spec" dropdown with an `(Auto)` default that infers the spec from the majority `specKey` across the wishlist's items.
+- **Phase-future items drop silently** from BiS lists when the player's real game phase is below the item's phase. Compare view no longer counts phase-2 items as "filtered" while we're in phase 1; rank numbering collapses around them implicitly.
+- **Raid scan pins the spec at scan time** — displayed spec stays accurate across `/reload` and later respec/talent-data corrections. Talent-based guess runs at scan time; if talent data isn't available, the player's current saved spec is preserved (no more silent fall-through to Affliction/Arms).
+- **Raid scan honors the Compare-tab filter settings** (PvP, World Boss, Classic zones, faction). Removed the separate `raidInclude*` flags and the "Raid Scanning" section in Settings — one place to configure filters now. Close Rank Gaps also applies to raid-scan rank numbering.
+- Raid scan output **merges equipped + upgrades per slot** into a single block. Warnings (missing enchant, bad gem) fold onto the worn-item row. Each slot's upgrade candidates indent beneath.
+- **BiS2!** text for rank 2 in dual slots (Rings, Trinkets) on the Compare tab — the top two picks are effectively co-BiS.
+- **Collapsed dual slots** show both equipped items inline on the header row instead of an empty `[+] Rings` stub.
+- **Spec auto-guess hardening**: `GuessSpec` now returns nil when talent data isn't loaded (instead of silently defaulting to the first spec). `CHARACTER_POINTS_CHANGED` re-runs the guess when talents resolve, so a wrong initial guess self-corrects without user intervention.
+- Fixed `Data.lua` (WowTBC.gg): Clefthoof Hide Leggings (31544) was mis-placed in the Shoulders list for 6 spellcaster specs; replaced with the intended quest sibling Spaulders of the Torn-heart (30925). `SourceDB.lua` also had 31544 mis-labeled as "Spaulders of the Torn-heart" — corrected.
+
 ## v3.9.0
 
 - Refreshed Wowhead BiS data: broader coverage in Phase 1 (~45% more items, including pre-raid and alt picks) and a complete Phase 2 list for every spec (previously sparse for several specs).

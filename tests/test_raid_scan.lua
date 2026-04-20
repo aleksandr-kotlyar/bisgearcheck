@@ -314,12 +314,12 @@ function T.test_finish_scan_sets_complete_state()
     assert_false(BiSGearCheck.isRaidScanning)
 end
 
-function T.test_finish_scan_saves_to_saved_vars()
+function T.test_finish_scan_saves_to_saved_vars_with_pinned_spec()
     setupBaseState()
     BiSGearCheck.raidScanState = "scanning"
     BiSGearCheck.isRaidScanning = true
     BiSGearCheck.raidScanResults = {
-        ["Alice-TestRealm"] = { issueCount = 1, upgrades = {} },
+        ["Alice-TestRealm"] = { specKey = "WarlockDestruction", issueCount = 1, upgrades = {} },
     }
     BiSGearCheck.raidScanSkipped = {
         { name = "Bob", class = "WARRIOR", reason = "Offline" },
@@ -327,7 +327,11 @@ function T.test_finish_scan_saves_to_saved_vars()
 
     BiSGearCheck:FinishRaidScan()
     assert_not_nil(BiSGearCheckSaved.lastRaidScan)
-    assert_equal(1, #BiSGearCheckSaved.lastRaidScan.charKeys)
+    assert_equal(1, #BiSGearCheckSaved.lastRaidScan.entries)
+    assert_equal("Alice-TestRealm", BiSGearCheckSaved.lastRaidScan.entries[1].charKey)
+    assert_equal("WarlockDestruction",
+        BiSGearCheckSaved.lastRaidScan.entries[1].specKey,
+        "scan entry pins the spec observed at scan time")
     assert_equal(1, #BiSGearCheckSaved.lastRaidScan.skipped)
 end
 
@@ -399,20 +403,27 @@ end
 -- TESTS: Raid Source Filters
 -- ============================================================
 
-function T.test_raid_filter_defaults_initialized()
+function T.test_raid_filter_reads_shared_compare_flags()
+    -- Raid scan and Compare share the same filter flags now; raidInclude*
+    -- keys are obsolete.
     setupBaseState()
-    BiSGearCheck:EnsureRaidFilterSettings()
-    assert_equal(false, BiSGearCheckSaved.raidIncludeClassicZones)
-    assert_equal(false, BiSGearCheckSaved.raidIncludePvP)
-    assert_equal(false, BiSGearCheckSaved.raidIncludeWorldBoss)
+    BiSGearCheckSaved.includeClassicZones = true
+    BiSGearCheckSaved.includePvP          = false
+    BiSGearCheckSaved.includeWorldBoss    = false
+    BiSGearCheckSources = { [99999] = { source = "PvP" } }
+    assert_true(BiSGearCheck:IsItemFilteredByRaidSource(99999),
+        "PvP excluded when compare-tab flag is off")
+    BiSGearCheckSaved.includePvP = true
+    assert_false(BiSGearCheck:IsItemFilteredByRaidSource(99999),
+        "PvP allowed when compare-tab flag is on")
 end
 
 function T.test_raid_filter_classic_zone_by_source()
     setupBaseState()
-    BiSGearCheck:EnsureRaidFilterSettings()
-    -- Item with classic zone source should be filtered by default
+    BiSGearCheckSaved.includeClassicZones = false
+    BiSGearCheckSaved.includePvP = true
+    BiSGearCheckSaved.includeWorldBoss = true
     BiSGearCheckSources = { [12345] = { source = "Dungeon", zone = "Stratholme" } }
-    -- Stub IsClassicZoneItem to return true for this item
     local orig = BiSGearCheck.IsClassicZoneItem
     BiSGearCheck.IsClassicZoneItem = function(self, id) return id == 12345 end
 
@@ -423,24 +434,153 @@ end
 
 function T.test_raid_filter_pvp_item()
     setupBaseState()
-    BiSGearCheck:EnsureRaidFilterSettings()
+    BiSGearCheckSaved.includeClassicZones = true
+    BiSGearCheckSaved.includePvP = false
+    BiSGearCheckSaved.includeWorldBoss = true
     BiSGearCheckSources = { [99999] = { source = "PvP" } }
     assert_true(BiSGearCheck:IsItemFilteredByRaidSource(99999))
 end
 
-function T.test_raid_filter_pvp_included_when_enabled()
+function T.test_raid_filter_pvp_matches_honor_marks_regardless_of_source()
+    -- Regression: General's Silk Cuffs has source = "Vendor" (not
+    -- "Vendor & Rep") and sourceType = "Honor & WSG Marks". Raid scan
+    -- used to require source == "Vendor & Rep" to recognize the PvP
+    -- sourceType, leaking it through the filter.
     setupBaseState()
-    BiSGearCheck:EnsureRaidFilterSettings()
-    BiSGearCheckSaved.raidIncludePvP = true
-    BiSGearCheckSources = { [99999] = { source = "PvP" } }
-    assert_false(BiSGearCheck:IsItemFilteredByRaidSource(99999))
+    BiSGearCheckSaved.includeClassicZones = true
+    BiSGearCheckSaved.includePvP = false
+    BiSGearCheckSaved.includeWorldBoss = true
+    BiSGearCheckSources = {
+        [28411] = { source = "Vendor", sourceType = "Honor & WSG Marks" },
+    }
+    assert_true(BiSGearCheck:IsItemFilteredByRaidSource(28411),
+        "honor/marks items should filter regardless of their 'source' label")
 end
 
 function T.test_raid_filter_world_boss()
     setupBaseState()
-    BiSGearCheck:EnsureRaidFilterSettings()
+    BiSGearCheckSaved.includeClassicZones = true
+    BiSGearCheckSaved.includePvP = true
+    BiSGearCheckSaved.includeWorldBoss = false
     BiSGearCheckSources = { [88888] = { source = "World Boss" } }
     assert_true(BiSGearCheck:IsItemFilteredByRaidSource(88888))
+end
+
+function T.test_raid_visible_bis_items_drops_future_content()
+    -- Regression: WowTBC.gg Destro Head lists 32494 (phase 2 engineering
+    -- goggles) at position 1; Voidheart Crown (28963) is raw position 2.
+    -- On phase 1, 32494 should be stripped so Voidheart Crown is #1 — not
+    -- tagged "#2" in the raid scan's BiS rank suffix.
+    setupBaseState()
+    BiSGearCheck.CurrentGamePhase = 1
+    BiSGearCheckItemPhases = { [32494] = 2, [28963] = 1, [32089] = 1 }
+    local visible = BiSGearCheck:RaidVisibleBisItems({ 32494, 28963, 32089 })
+    assert_equal(2, #visible)
+    assert_equal(28963, visible[1])
+    assert_equal(32089, visible[2])
+end
+
+function T.test_raid_visible_bis_items_collapses_filtered_when_close_gaps_on()
+    -- Regression: with Close Rank Gaps on, source-filtered items (PvP, etc.)
+    -- should disappear from the rank numbering in the raid scan — so an
+    -- equipped item at raw rank 2 whose rank-1 sibling is a filtered PvP
+    -- item tags as "#1".
+    setupBaseState()
+    BiSGearCheck.CurrentGamePhase = 1
+    BiSGearCheckSaved.includePvP = false
+    BiSGearCheckSaved.hideFilteredRanks = true
+    BiSGearCheckSources = {
+        [1001] = { source = "PvP" },
+        [1002] = { source = "Karazhan" },
+        [1003] = { source = "Karazhan" },
+    }
+    local visible = BiSGearCheck:RaidVisibleBisItems({ 1001, 1002, 1003 })
+    assert_equal(2, #visible)
+    assert_equal(1002, visible[1], "PvP item drops out; rank 1 becomes the next eligible")
+    assert_equal(1003, visible[2])
+end
+
+function T.test_raid_visible_bis_items_drops_wrong_faction_unconditionally()
+    -- Faction-restricted items are unavailable to the player; they should
+    -- never occupy a rank slot, regardless of Close Rank Gaps.
+    setupBaseState()
+    BiSGearCheck.CurrentGamePhase = 1
+    BiSGearCheckSaved.hideFilteredRanks = false
+    BiSGearCheck.playerFaction = "Alliance"
+    BiSGearCheckSources = {
+        [2001] = { source = "PvP", faction = "Horde" },
+        [2002] = { source = "Karazhan" },
+    }
+    local visible = BiSGearCheck:RaidVisibleBisItems({ 2001, 2002 })
+    assert_equal(1, #visible)
+    assert_equal(2002, visible[1],
+        "opposing-faction item drops out of the rank list regardless of setting")
+end
+
+function T.test_raid_visible_bis_items_keeps_filtered_when_close_gaps_off()
+    -- With the setting off, source-filtered items stay in the list so
+    -- their "slot" still consumes a rank number (raid-scan UI drops them
+    -- from the upgrade list separately).
+    setupBaseState()
+    BiSGearCheck.CurrentGamePhase = 1
+    BiSGearCheckSaved.includePvP = false
+    BiSGearCheckSaved.hideFilteredRanks = false
+    BiSGearCheckSources = {
+        [1001] = { source = "PvP" },
+        [1002] = { source = "Karazhan" },
+    }
+    local visible = BiSGearCheck:RaidVisibleBisItems({ 1001, 1002 })
+    assert_equal(2, #visible, "filtered items stay in the list when Close Rank Gaps is off")
+end
+
+function T.test_raid_visible_bis_items_preserves_current_phase_items()
+    -- Once the server is on phase 2, 32494 is real content and should be
+    -- kept in the list (equipped rank tags then reflect the phase-2 world).
+    setupBaseState()
+    BiSGearCheck.CurrentGamePhase = 2
+    BiSGearCheckItemPhases = { [32494] = 2, [28963] = 1 }
+    local visible = BiSGearCheck:RaidVisibleBisItems({ 32494, 28963 })
+    assert_equal(2, #visible)
+    assert_equal(32494, visible[1])
+end
+
+function T.test_start_scan_preserves_selected_spec_when_guess_fails()
+    -- Regression: StartRaidScan used to overwrite self.selectedSpec with
+    -- GuessSpec()'s return value unconditionally. When GuessSpec returns
+    -- nil (talent data not available yet), AnalyzeCharacter then fell back
+    -- to specs[1] and the raid header displayed the wrong spec for the
+    -- player — e.g. a Destruction warlock showed as "Affliction".
+    setupBaseState()
+    BiSGearCheckSaved.characters["TestChar-TestRealm"].class = "WARLOCK"
+    BiSGearCheckSaved.characters["TestChar-TestRealm"].selectedSpec = "WarlockDestruction"
+    MockWoW._playerClass = "WARLOCK"
+    MockWoW._playerClassDisplay = "Warlock"
+    BiSGearCheck.selectedSpec = "WarlockDestruction"
+    -- No talent data available — GuessSpec will return nil
+    MockWoW.SetInspectTalents({})
+    -- Stub away the rest of scan machinery
+    BiSGearCheck.GetNumGroupMembers = function() return 0 end
+    MockWoW.SetGroupMembers({}, false)
+
+    BiSGearCheck:StartRaidScan()
+
+    assert_equal("WarlockDestruction", BiSGearCheck.selectedSpec,
+        "selectedSpec must be preserved when GuessSpec returns nil")
+    local result = BiSGearCheck.raidScanResults["TestChar-TestRealm"]
+    assert_not_nil(result)
+    assert_equal("WarlockDestruction", result.specKey,
+        "raid scan result should use the preserved spec, not specs[1] fallback")
+end
+
+function T.test_raid_filter_migration_wipes_legacy_raid_keys()
+    setupBaseState()
+    BiSGearCheckSaved.raidIncludePvP       = true
+    BiSGearCheckSaved.raidIncludeWorldBoss = false
+    BiSGearCheckSaved.raidIncludeClassicZones = true
+    BiSGearCheck:MigrateSavedVars()
+    assert_nil(BiSGearCheckSaved.raidIncludePvP)
+    assert_nil(BiSGearCheckSaved.raidIncludeWorldBoss)
+    assert_nil(BiSGearCheckSaved.raidIncludeClassicZones)
 end
 
 -- ============================================================
@@ -872,9 +1012,11 @@ end
 -- TESTS: RestoreLastRaidScan
 -- ============================================================
 
-function T.test_restore_last_scan_repopulates_results()
+function T.test_restore_last_scan_repopulates_results_with_pinned_spec()
     setupBaseState()
-    -- Set up a character with equipped gear
+    -- Character record's current selectedSpec is "Fire", but the scan
+    -- entry pins "Arcane" — restored result should read Arcane, reflecting
+    -- what the scan actually observed.
     BiSGearCheckSaved.characters["Alice-TestRealm"] = {
         class = "MAGE",
         faction = "Alliance",
@@ -882,19 +1024,54 @@ function T.test_restore_last_scan_repopulates_results()
         wishlists = { Default = {} },
         activeWishlist = "Default",
         inspected = true,
-        selectedSpec = "MageArcane",
+        selectedSpec = "MageFire",
         equipped = { Head = {{ id = 30000, link = mockLink(30000) }} },
     }
     BiSGearCheckSaved.lastRaidScan = {
         time = os.time(),
-        charKeys = { "Alice-TestRealm" },
+        entries = { { charKey = "Alice-TestRealm", specKey = "MageArcane" } },
         skipped = { { name = "Bob", class = "WARRIOR", reason = "Offline" } },
     }
 
     BiSGearCheck:RestoreLastRaidScan()
     assert_equal("complete", BiSGearCheck.raidScanState)
-    assert_not_nil(BiSGearCheck.raidScanResults["Alice-TestRealm"])
+    local result = BiSGearCheck.raidScanResults["Alice-TestRealm"]
+    assert_not_nil(result)
+    assert_equal("MageArcane", result.specKey,
+        "restored scan uses the pinned spec, not charData.selectedSpec")
     assert_equal(1, #BiSGearCheck.raidScanSkipped)
+end
+
+function T.test_restore_last_scan_falls_back_to_legacy_charKeys_format()
+    -- Saved data from older versions had charKeys instead of entries.
+    -- Ensure those still load (falling back to charData.selectedSpec).
+    setupBaseState()
+    BiSGearCheckSaved.characters["Alice-TestRealm"] = {
+        class = "MAGE", faction = "Alliance", level = 70,
+        wishlists = { Default = {} }, selectedSpec = "MageFrost",
+        equipped = { Head = {{ id = 30000, link = mockLink(30000) }} },
+    }
+    BiSGearCheckSaved.lastRaidScan = {
+        time = os.time(),
+        charKeys = { "Alice-TestRealm" },
+        skipped = {},
+    }
+    BiSGearCheck:RestoreLastRaidScan()
+    local result = BiSGearCheck.raidScanResults["Alice-TestRealm"]
+    assert_not_nil(result)
+    assert_equal("MageFrost", result.specKey)
+end
+
+function T.test_analyze_character_honors_pinned_spec_argument()
+    setupBaseState()
+    BiSGearCheckSaved.characters["Alice-TestRealm"] = {
+        class = "WARLOCK", faction = "Alliance", level = 70,
+        wishlists = { Default = {} }, selectedSpec = "WarlockAffliction",
+        equipped = { Head = {} },
+    }
+    BiSGearCheck:AnalyzeCharacter("Alice-TestRealm", "WarlockDestruction")
+    assert_equal("WarlockDestruction",
+        BiSGearCheck.raidScanResults["Alice-TestRealm"].specKey)
 end
 
 function T.test_restore_last_scan_noop_when_no_data()

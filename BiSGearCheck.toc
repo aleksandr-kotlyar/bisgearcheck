@@ -2,7 +2,7 @@
 ## Title: BiSGearCheck
 ## Notes: Compare equipped gear against Best in Slot lists with tooltip integration.
 ## Author: Breakbone - Dreamscythe
-## Version: 3.9.0
+## Version: 3.10.0
 ## X-License: All Rights Reserved
 ## X-Curse-Project-ID: 1492057
 ## X-WoWI-ID: 27109
@@ -37,6 +37,7 @@ ElvUISkin.lua
 Settings.lua
 Character.lua
 Wishlist.lua
+WishlistCompare.lua
 Comparison.lua
 RaidScan.lua
 Core.lua

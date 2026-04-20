@@ -110,6 +110,12 @@ function BiSGearCheck:MigrateSavedVars()
     if not BiSGearCheckChar then
         BiSGearCheckChar = {}
     end
+
+    -- Raid scan used to have its own parallel filter flags; they now share
+    -- the Compare-tab flags. Drop the obsolete keys so they don't linger.
+    BiSGearCheckSaved.raidIncludeClassicZones = nil
+    BiSGearCheckSaved.raidIncludePvP          = nil
+    BiSGearCheckSaved.raidIncludeWorldBoss    = nil
 end
 
 -- ============================================================

@@ -43,6 +43,11 @@ function BiSGearCheck:RenderWishlist()
     end
     f.autoCheck:SetChecked(self.wishlistAutoFilter)
 
+    if f.wlCompareCheck then
+        f.wlCompareCheck:SetChecked(
+            self:IsWishlistCompareEnabled(self.viewingCharKey, self.activeWishlist))
+    end
+
     local scrollChild = f.scrollChild
     self:ClearScrollContent(scrollChild)
 

@@ -420,6 +420,91 @@ function T.test_compare_slot_hide_filtered_dual_slot_rings()
     assert_equal(2, result.equipped[2].effectiveRank)
 end
 
+-- ============================================================
+-- TESTS: Phase-future silent exclusion
+-- ============================================================
+--
+-- Items whose phase exceeds the real current game phase are future content.
+-- CompareSlot drops them from bisItems entirely so they don't contribute
+-- to upgrade lists, rank numbers, or filtered counts. Items whose phase
+-- is in the current game phase but above the user's phaseFilter are a
+-- user-chosen filter and stay in bisItems to be counted/collapsed normally.
+
+function T.test_phase_future_items_dropped_from_bisItems_entirely()
+    setupBasicState()
+    BiSGearCheck.CurrentGamePhase = 1  -- live on the server: phase 1
+    BiSGearCheck.phaseFilter = 1
+    BiSGearCheckItemPhases = {
+        [201] = 2,  -- future content, should disappear silently
+        [202] = 1,  -- available in current phase
+        [203] = 1,  -- available in current phase (equipped)
+    }
+    BiSGearCheckSources = {
+        [201] = { source = "Karazhan", sourceType = "Boss" },
+        [202] = { source = "Karazhan", sourceType = "Boss" },
+        [203] = { source = "Karazhan", sourceType = "Boss" },
+    }
+    MockWoW.SetInventory({ [1] = { id = 203, link = "|Hitem:203:0:0:0:0:0|h[Helm]|h" } })
+    MockWoW.SetItemInfo(201, { name = "Phase2 Helm", quality = 4 })
+    MockWoW.SetItemInfo(202, { name = "Current Helm", quality = 4 })
+
+    local result = BiSGearCheck:CompareSlot("Head", { 201, 202, 203 })
+    -- 201 is future content: absent from upgrades entirely
+    assert_equal(1, #result.upgrades, "phase-future item silently excluded")
+    assert_equal(202, result.upgrades[1].id)
+    -- Equipped rank reflects the *filtered* list — 203 was position 3 of 3,
+    -- becomes position 2 of 2 once 201 is gone
+    assert_equal(2, result.equipped[1].rank)
+end
+
+function T.test_phase_current_but_narrowed_items_stay_in_list()
+    -- User is in phase 2 on the server but narrowed phaseFilter to 1.
+    -- Items whose phase == 2 (available now, but user narrowed away)
+    -- should stay in bisItems so the UI can count them as "filtered".
+    setupBasicState()
+    BiSGearCheck.CurrentGamePhase = 2
+    BiSGearCheck.phaseFilter = 1
+    BiSGearCheckItemPhases = {
+        [201] = 2,  -- current phase (2) but above filter (1): still in list
+        [202] = 1,  -- below filter, unfiltered
+    }
+    BiSGearCheckSources = {
+        [201] = { source = "Karazhan", sourceType = "Boss" },
+        [202] = { source = "Karazhan", sourceType = "Boss" },
+    }
+    MockWoW.SetInventory({ [1] = { id = 202, link = "|Hitem:202:0:0:0:0:0|h[Helm]|h" } })
+    MockWoW.SetItemInfo(201, { name = "Phase2 Helm", quality = 4 })
+
+    local result = BiSGearCheck:CompareSlot("Head", { 201, 202 })
+    -- 201 is in-phase for the server and still an "upgrade" the UI will
+    -- count as filtered (via GetItemFilterReason → "Phase" → footer)
+    assert_equal(1, #result.upgrades)
+    assert_equal(201, result.upgrades[1].id)
+end
+
+function T.test_phase_future_rank_numbering_collapses()
+    -- Phase-future items occupying low ranks shouldn't create holes — the
+    -- remaining items should see their ranks renumber down.
+    setupBasicState()
+    BiSGearCheck.CurrentGamePhase = 1
+    BiSGearCheck.phaseFilter = 1
+    BiSGearCheckItemPhases = {
+        [201] = 2, [202] = 2, [203] = 1, [204] = 1,  -- first two are future
+    }
+    BiSGearCheckSources = {
+        [203] = { source = "Karazhan", sourceType = "Boss" },
+        [204] = { source = "Karazhan", sourceType = "Boss" },
+    }
+    MockWoW.SetInventory({ [1] = { id = 204, link = "|Hitem:204:0:0:0:0:0|h[Helm]|h" } })
+    MockWoW.SetItemInfo(203, { name = "Best Current", quality = 4 })
+
+    local result = BiSGearCheck:CompareSlot("Head", { 201, 202, 203, 204 })
+    assert_equal(1, #result.upgrades)
+    assert_equal(203, result.upgrades[1].id)
+    assert_equal(1, result.upgrades[1].rank, "203 is effectively rank 1 after phase-future items drop out")
+    assert_equal(2, result.equipped[1].rank)
+end
+
 function T.test_compare_slot_hide_filtered_leaves_unfiltered_upgrades_visible()
     -- When some filtered items exist above equipped but an unfiltered upgrade
     -- also exists, the upgrade should still be shown with its effective rank.

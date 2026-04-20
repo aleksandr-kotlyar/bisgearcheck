@@ -223,15 +223,25 @@ end
 -- Called when source settings change — rebuild tooltip index and refresh UI
 function BiSGearCheck:OnSourceSettingsChanged()
     self:BuildTooltipIndex()
-    -- If the selected data source was disabled or has no data for current phase, switch
+    -- Share the addon-enabled check between published + wishlist sources;
+    -- sourceSettings holds flags for both kinds keyed by source key.
     local needSwitch = not self:IsSourceEnabled(self.dataSource)
     if not needSwitch then
-        local phase = self.phaseFilter or 1
-        local currentSrc
-        for _, src in ipairs(self.DataSources) do
-            if src.key == self.dataSource then currentSrc = src; break end
+        if self:IsWishlistSourceKey(self.dataSource) then
+            -- Verify the underlying wishlist still exists
+            local ck, wn = self:ParseWishlistSourceKey(self.dataSource)
+            local cd = ck and BiSGearCheckSaved.characters and BiSGearCheckSaved.characters[ck]
+            if not (cd and cd.wishlists and cd.wishlists[wn]) then
+                needSwitch = true
+            end
+        else
+            local phase = self.phaseFilter or 1
+            local currentSrc
+            for _, src in ipairs(self.DataSources) do
+                if src.key == self.dataSource then currentSrc = src; break end
+            end
+            needSwitch = not currentSrc or not self:SourceHasPhase(currentSrc, phase)
         end
-        needSwitch = not currentSrc or not self:SourceHasPhase(currentSrc, phase)
     end
     if needSwitch then
         local available = self:GetEnabledDataSourcesForPhase()
@@ -592,6 +602,19 @@ function BiSGearCheck:PlayerHasProfession(profession)
     return profs[profession] or false
 end
 
+-- The highest phase currently live on the server. Separate from
+-- `phaseFilter`, which is the user's chosen view (may be lower). Used to
+-- distinguish "future content" (item phase > currentGamePhase — never
+-- display, never count) from "user narrowed their filter" (item phase
+-- ≤ currentGamePhase but > phaseFilter — count as filtered).
+--
+-- Bump this when a new content phase goes live on Anniversary.
+BiSGearCheck.CurrentGamePhase = 1
+
+function BiSGearCheck:GetCurrentGamePhase()
+    return self.CurrentGamePhase or 1
+end
+
 -- Check if an item belongs to a phase at or below the given max phase
 -- Items with no phase data are assumed to be available (phase 1 / pre-raid)
 function BiSGearCheck:ItemInPhase(itemID, maxPhase)
@@ -631,14 +654,22 @@ local TalentTabToSpec = {
     ["DRUID"]  = { "DruidBalance", "DruidFeralDPS", "DruidRestoration" },
     ["PRIEST"] = { "PriestHoly",   "PriestHoly",    "PriestShadow" },
 }
--- Try to auto-detect spec from talent points
+-- Try to auto-detect spec from talent points. Returns nil when talent data
+-- isn't available yet (login / addon-load race) or when every tab is empty —
+-- callers should leave the saved spec alone in that case. Previously this
+-- fell back to specs[1], which quietly persisted a wrong guess for anyone
+-- whose talents load after the initial guess runs.
 function BiSGearCheck:GuessSpec()
     local _, classToken = UnitClass("player")
     local specs = self.ClassSpecs[classToken]
     if not specs then return nil end
 
+    local tabCount = GetNumTalentTabs() or 0
+    if tabCount == 0 then return nil end
+
     local bestTab, bestPoints = 0, 0
-    for i = 1, GetNumTalentTabs() do
+    local anyData = false
+    for i = 1, tabCount do
         local results = { GetTalentTabInfo(i) }
         -- Points spent could be at index 3 or 5 depending on client version
         local points = 0
@@ -646,6 +677,7 @@ function BiSGearCheck:GuessSpec()
             local val = tonumber(results[j])
             if val and val >= 0 and val <= 71 then
                 points = val
+                anyData = true
                 break
             end
         end
@@ -655,17 +687,18 @@ function BiSGearCheck:GuessSpec()
         end
     end
 
-    if bestTab > 0 then
-        local tabMap = TalentTabToSpec[classToken]
-        if tabMap and tabMap[bestTab] then
-            return tabMap[bestTab]
-        end
-        if bestTab <= #specs then
-            return specs[bestTab].key
-        end
-    end
+    -- No points spent anywhere (fresh character) or no tab data returned yet
+    -- (talents not loaded). Don't guess — let the caller try again later.
+    if not anyData or bestTab == 0 then return nil end
 
-    return specs[1].key
+    local tabMap = TalentTabToSpec[classToken]
+    if tabMap and tabMap[bestTab] then
+        return tabMap[bestTab]
+    end
+    if bestTab <= #specs then
+        return specs[bestTab].key
+    end
+    return nil
 end
 
 -- Guess spec for an inspected character from their talent tree.

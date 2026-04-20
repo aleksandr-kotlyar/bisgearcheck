@@ -187,29 +187,47 @@ function BiSGearCheck:SetupSourceSpecDropdowns(f)
     sourceDropdown:SetPoint("TOPLEFT", f, "TOPLEFT", -5, -60)
     UIDropDownMenu_SetWidth(sourceDropdown, 100)
 
+    local function addSourceButton(level, srcInfo)
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = srcInfo.label
+        info.value = srcInfo.key
+        info.func = function(self)
+            UIDropDownMenu_SetSelectedValue(sourceDropdown, self.value)
+            UIDropDownMenu_SetText(sourceDropdown, self:GetText())
+            BiSGearCheck:SetDataSource(self.value)
+        end
+        info.notCheckable = true
+        UIDropDownMenu_AddButton(info, level)
+    end
+
     local function SourceDropdownInit(self, level)
         for _, srcInfo in ipairs(BiSGearCheck:GetEnabledDataSourcesForPhase()) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = srcInfo.label
-            info.value = srcInfo.key
-            info.func = function(self)
-                UIDropDownMenu_SetSelectedValue(sourceDropdown, self.value)
-                UIDropDownMenu_SetText(sourceDropdown, self:GetText())
-                BiSGearCheck:SetDataSource(self.value)
+            addSourceButton(level, srcInfo)
+        end
+        -- Compare-enabled wishlists appear after published sources.
+        if BiSGearCheck.GetCompareEnabledWishlists then
+            for _, srcInfo in ipairs(BiSGearCheck:GetCompareEnabledWishlists()) do
+                addSourceButton(level, srcInfo)
             end
-            info.notCheckable = true
-            UIDropDownMenu_AddButton(info, level)
         end
     end
     UIDropDownMenu_Initialize(sourceDropdown, SourceDropdownInit)
 
-    -- Set initial source text
-    for _, srcInfo in ipairs(self:GetEnabledDataSourcesForPhase()) do
-        if srcInfo.key == self.dataSource then
-            UIDropDownMenu_SetText(sourceDropdown, srcInfo.label)
-            UIDropDownMenu_SetSelectedValue(sourceDropdown, srcInfo.key)
-            break
+    -- Set initial source text: published or wishlist
+    local function labelFor(key)
+        for _, srcInfo in ipairs(self:GetEnabledDataSourcesForPhase()) do
+            if srcInfo.key == key then return srcInfo.label end
         end
+        if self.GetCompareEnabledWishlists then
+            for _, srcInfo in ipairs(self:GetCompareEnabledWishlists()) do
+                if srcInfo.key == key then return srcInfo.label end
+            end
+        end
+    end
+    local initialLabel = labelFor(self.dataSource)
+    if initialLabel then
+        UIDropDownMenu_SetText(sourceDropdown, initialLabel)
+        UIDropDownMenu_SetSelectedValue(sourceDropdown, self.dataSource)
     end
 
     -- Spec dropdown
@@ -403,28 +421,45 @@ function BiSGearCheck:SetupBisListBar(f)
     bislistSourceDropdown:SetPoint("TOPLEFT", f, "TOPLEFT", -5, -60)
     UIDropDownMenu_SetWidth(bislistSourceDropdown, 100)
 
+    local function addBislistSourceButton(level, srcInfo)
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = srcInfo.label
+        info.value = srcInfo.key
+        info.func = function(self)
+            UIDropDownMenu_SetSelectedValue(bislistSourceDropdown, self.value)
+            UIDropDownMenu_SetText(bislistSourceDropdown, self:GetText())
+            BiSGearCheck:SetDataSource(self.value)
+        end
+        info.notCheckable = true
+        UIDropDownMenu_AddButton(info, level)
+    end
+
     local function BislistSourceInit(self, level)
         for _, srcInfo in ipairs(BiSGearCheck:GetEnabledDataSourcesForPhase()) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = srcInfo.label
-            info.value = srcInfo.key
-            info.func = function(self)
-                UIDropDownMenu_SetSelectedValue(bislistSourceDropdown, self.value)
-                UIDropDownMenu_SetText(bislistSourceDropdown, self:GetText())
-                BiSGearCheck:SetDataSource(self.value)
+            addBislistSourceButton(level, srcInfo)
+        end
+        if BiSGearCheck.GetCompareEnabledWishlists then
+            for _, srcInfo in ipairs(BiSGearCheck:GetCompareEnabledWishlists()) do
+                addBislistSourceButton(level, srcInfo)
             end
-            info.notCheckable = true
-            UIDropDownMenu_AddButton(info, level)
         end
     end
     UIDropDownMenu_Initialize(bislistSourceDropdown, BislistSourceInit)
 
-    -- Set initial text
-    for _, srcInfo in ipairs(self:GetEnabledDataSourcesForPhase()) do
-        if srcInfo.key == self.dataSource then
-            UIDropDownMenu_SetText(bislistSourceDropdown, srcInfo.label)
-            break
+    -- Set initial text: published or wishlist
+    local function bislistLabelFor(key)
+        for _, srcInfo in ipairs(self:GetEnabledDataSourcesForPhase()) do
+            if srcInfo.key == key then return srcInfo.label end
         end
+        if self.GetCompareEnabledWishlists then
+            for _, srcInfo in ipairs(self:GetCompareEnabledWishlists()) do
+                if srcInfo.key == key then return srcInfo.label end
+            end
+        end
+    end
+    local bislistInitialLabel = bislistLabelFor(self.dataSource)
+    if bislistInitialLabel then
+        UIDropDownMenu_SetText(bislistSourceDropdown, bislistInitialLabel)
     end
 
     local bislistSpecDropdown = CreateFrame("Frame", "BiSGearCheckBislistSpecDropdown", bislistBar, "UIDropDownMenuTemplate")

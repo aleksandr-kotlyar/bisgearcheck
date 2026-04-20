@@ -570,10 +570,11 @@ end
 
 -- Edge cases
 
-function T.test_guess_spec_no_talents()
+function T.test_guess_spec_no_talents_returns_nil()
+    -- All tabs present but all 0 points (fresh character or talents not
+    -- yet loaded). Return nil so callers don't persist a wrong guess.
     setupGuessSpec("WARRIOR", { 0, 0, 0 })
-    -- No points in any tab → falls through to first spec
-    assert_equal("WarriorArms", BiSGearCheck:GuessSpec())
+    assert_nil(BiSGearCheck:GuessSpec())
 end
 
 function T.test_guess_spec_nil_class()
@@ -582,10 +583,18 @@ function T.test_guess_spec_nil_class()
     assert_nil(BiSGearCheck:GuessSpec())
 end
 
-function T.test_guess_spec_no_talent_tabs()
+function T.test_guess_spec_no_talent_tabs_returns_nil()
+    -- GetNumTalentTabs() == 0 means talent data isn't available yet.
     setupGuessSpec("WARRIOR", {})
-    -- 0 talent tabs → falls through to first spec
-    assert_equal("WarriorArms", BiSGearCheck:GuessSpec())
+    assert_nil(BiSGearCheck:GuessSpec())
+end
+
+function T.test_guess_spec_warlock_destruction_heavy()
+    -- Regression: a warlock with 0 Affliction, 1 Demo, 40 Destruction used
+    -- to get guessed as Affliction (specs[1] fallback) when talents were
+    -- slow to load. Now returns Destruction as long as tab data is present.
+    setupGuessSpec("WARLOCK", { 0, 1, 40 })
+    assert_equal("WarlockDestruction", BiSGearCheck:GuessSpec())
 end
 
 function T.test_guess_spec_tied_points_picks_first()

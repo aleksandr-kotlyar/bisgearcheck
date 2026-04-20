@@ -368,87 +368,101 @@ function BiSGearCheck:RenderRaidCharacter(parent, charKey, yOffset, width)
         return yOffset
     end
 
-    -- Issues by slot
-    if result.issueCount > 0 then
-        for _, issue in ipairs(result.issues) do
-            local row = self:CreateRow(parent, yOffset, width)
-            local itemText = issue.itemLink or ("Item #" .. (issue.itemID or "?"))
-            local rankText = issue.bisRank and string.format(" %s#%d|r", T.hex("rankNum"), issue.bisRank) or ""
-            local warnText = table.concat(issue.warnings, " ")
-            row.text:SetText(string.format("  %s%s:|r %s%s %s",
-                T.hex("slotHeader"), issue.slotName, itemText, rankText, warnText))
+    -- Merge equipped + upgrades per-slot: one slot block per row group.
+    -- Each block starts with the worn item (with BiS rank + any warnings
+    -- inlined) and then indents upgrade candidates beneath it. Issues
+    -- ("missing enchant", "bad gem", etc.) fold into the worn-item row
+    -- for that slot rather than getting their own separate section.
 
-            if issue.itemLink then
-                row._itemLink = issue.itemLink
-                row:EnableMouse(true)
-                row:SetScript("OnEnter", self.OnItemLinkEnter)
-                row:SetScript("OnLeave", self.OnTooltipLeave)
-            elseif issue.itemID then
-                row._itemID = issue.itemID
-                row:EnableMouse(true)
-                row:SetScript("OnEnter", self.OnItemIDEnter)
-                row:SetScript("OnLeave", self.OnTooltipLeave)
-            end
+    local charData = self:GetCharacterData(charKey)
+    local equipped = charData and charData.equipped or {}
 
-            yOffset = yOffset - self.ITEM_ROW_HEIGHT
+    -- Build a per-slot warnings lookup from the analyzer's issue list so
+    -- we can suffix each worn-item row with its issue text, if any.
+    local warnBySlotItem = {}  -- [slotName][itemID] = "warn1 warn2"
+    for _, issue in ipairs(result.issues or {}) do
+        warnBySlotItem[issue.slotName] = warnBySlotItem[issue.slotName] or {}
+        if issue.itemID then
+            warnBySlotItem[issue.slotName][issue.itemID] = table.concat(issue.warnings, " ")
         end
     end
 
-    -- Upgrades
-    local hasUpgrades = false
     for _, slotName in ipairs(self.SlotOrder) do
-        local slotUpgrades = result.upgrades[slotName]
-        if slotUpgrades and #slotUpgrades > 0 then
-            -- Apply zone filter
-            local visibleUpgrades = {}
-            for _, upgrade in ipairs(slotUpgrades) do
+        local slotItems = equipped[slotName]
+
+        -- Pre-filter the slot's upgrade list (zone + source filters)
+        local rawUpgrades = result.upgrades and result.upgrades[slotName] or nil
+        local visibleUpgrades = {}
+        if rawUpgrades then
+            for _, upgrade in ipairs(rawUpgrades) do
                 local hideSource = self:IsItemFilteredByRaidSource(upgrade.id)
                 local hideZone = self.zoneFilter and not self:ItemMatchesZone(upgrade.id, self.zoneFilter)
                 if not hideSource and not hideZone then
                     visibleUpgrades[#visibleUpgrades + 1] = upgrade
                 end
             end
+        end
 
-            if #visibleUpgrades > 0 then
-                if not hasUpgrades then
-                    local hdr = self:CreateRow(parent, yOffset, width)
-                    hdr.text:SetText("  " .. T.hex("enchantLabel") .. "Upgrades:|r")
-                    yOffset = yOffset - self.ITEM_ROW_HEIGHT
-                    hasUpgrades = true
-                else
-                    -- Small gap between slot sections
-                    yOffset = yOffset - 4
-                end
-
-                -- Slot label
-                local slotRow = self:CreateRow(parent, yOffset, width)
-                slotRow.text:SetText("    " .. T.hex("slotHeader") .. slotName .. "|r")
-                yOffset = yOffset - self.ITEM_ROW_HEIGHT
-
-                for _, upgrade in ipairs(visibleUpgrades) do
+        local hasEquipped = slotItems and #slotItems > 0
+        if hasEquipped or #visibleUpgrades > 0 then
+            -- Worn item row(s) — BiS rank + warning suffix inlined
+            if hasEquipped then
+                for _, item in ipairs(slotItems) do
                     local row = self:CreateRow(parent, yOffset, width)
-                    local lateName, lateLink = GetItemInfo(upgrade.id)
-                    local itemText = lateLink or lateName or ("Item #" .. upgrade.id)
-
-                    local sourceText = ""
-                    if upgrade.source and upgrade.source ~= "Unknown" then
-                        if upgrade.sourceType and upgrade.sourceType ~= "" then
-                            sourceText = string.format("%s%s (%s)|r", T.hex("sourceInfo"), upgrade.source, upgrade.sourceType)
-                        else
-                            sourceText = string.format("%s%s|r", T.hex("sourceInfo"), upgrade.source)
+                    local rankText = ""
+                    if result.bisRankBySlot and result.bisRankBySlot[slotName] and item.id then
+                        local rank = result.bisRankBySlot[slotName][item.id]
+                        if rank then
+                            rankText = string.format(" %s#%d|r", T.hex("rankNum"), rank)
                         end
                     end
+                    local warnText = item.id and warnBySlotItem[slotName] and warnBySlotItem[slotName][item.id]
+                    local warnSuffix = warnText and (" " .. warnText) or ""
+                    local itemText = item.link or ("Item #" .. (item.id or "?"))
+                    row.text:SetText(string.format("  %s%s:|r %s%s%s",
+                        T.hex("slotHeader"), slotName, itemText, rankText, warnSuffix))
 
-                    row.text:SetText(string.format("      %s#%d|r %s %s",
-                        T.hex("rankNum"), upgrade.rank, itemText, sourceText))
-
-                    row._itemID = upgrade.id
-                    row:EnableMouse(true)
-                    row:SetScript("OnEnter", self.OnItemIDEnter)
-                    row:SetScript("OnLeave", self.OnTooltipLeave)
-
+                    if item.link then
+                        row._itemLink = item.link
+                        row:EnableMouse(true)
+                        row:SetScript("OnEnter", self.OnItemLinkEnter)
+                        row:SetScript("OnLeave", self.OnTooltipLeave)
+                    elseif item.id then
+                        row._itemID = item.id
+                        row:EnableMouse(true)
+                        row:SetScript("OnEnter", self.OnItemIDEnter)
+                        row:SetScript("OnLeave", self.OnTooltipLeave)
+                    end
                     yOffset = yOffset - self.ITEM_ROW_HEIGHT
                 end
+            else
+                -- Slot empty but upgrades exist — still show the slot name
+                local row = self:CreateRow(parent, yOffset, width)
+                row.text:SetText(string.format("  %s%s:|r %s(empty)|r",
+                    T.hex("slotHeader"), slotName, T.hex("emptySlot")))
+                yOffset = yOffset - self.ITEM_ROW_HEIGHT
+            end
+
+            -- Upgrade candidates indented beneath the slot's equipped row
+            for _, upgrade in ipairs(visibleUpgrades) do
+                local row = self:CreateRow(parent, yOffset, width)
+                local lateName, lateLink = GetItemInfo(upgrade.id)
+                local itemText = lateLink or lateName or ("Item #" .. upgrade.id)
+                local sourceText = ""
+                if upgrade.source and upgrade.source ~= "Unknown" then
+                    if upgrade.sourceType and upgrade.sourceType ~= "" then
+                        sourceText = string.format("%s%s (%s)|r", T.hex("sourceInfo"), upgrade.source, upgrade.sourceType)
+                    else
+                        sourceText = string.format("%s%s|r", T.hex("sourceInfo"), upgrade.source)
+                    end
+                end
+                row.text:SetText(string.format("    %s#%d|r %s %s",
+                    T.hex("rankNum"), upgrade.rank, itemText, sourceText))
+                row._itemID = upgrade.id
+                row:EnableMouse(true)
+                row:SetScript("OnEnter", self.OnItemIDEnter)
+                row:SetScript("OnLeave", self.OnTooltipLeave)
+                yOffset = yOffset - self.ITEM_ROW_HEIGHT
             end
         end
     end

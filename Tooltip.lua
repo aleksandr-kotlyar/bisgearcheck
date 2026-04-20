@@ -11,32 +11,44 @@ function BiSGearCheck:BuildTooltipIndex()
     self.TooltipIndex = {}
 
     local phase = self.phaseFilter or 1
-    for _, src in ipairs(self:GetTooltipDataSources()) do
-        local dbName = self:GetSourceDBName(src, phase)
-        local db = dbName and _G[dbName]
-        if db then
-            for specKey, specData in pairs(db) do
-                if specData.slots then
-                    for slotName, items in pairs(specData.slots) do
-                        for rank, itemID in ipairs(items) do
-                            local id = tostring(itemID)
-                            if not self.TooltipIndex[id] then
-                                self.TooltipIndex[id] = {}
-                            end
-                            table.insert(self.TooltipIndex[id], {
-                                specKey = specKey,
-                                class = specData.class,
-                                spec = specData.spec,
-                                slot = slotName,
-                                rank = rank,
-                                source = src.key,
-                                sourceLabel = src.label,
-                                phase = phase,
-                            })
+
+    local function indexDB(db, srcKey, srcLabel)
+        if not db then return end
+        for specKey, specData in pairs(db) do
+            if specData.slots then
+                for slotName, items in pairs(specData.slots) do
+                    for rank, itemID in ipairs(items) do
+                        local id = tostring(itemID)
+                        if not self.TooltipIndex[id] then
+                            self.TooltipIndex[id] = {}
                         end
+                        table.insert(self.TooltipIndex[id], {
+                            specKey = specKey,
+                            class = specData.class,
+                            spec = specData.spec,
+                            slot = slotName,
+                            rank = rank,
+                            source = srcKey,
+                            sourceLabel = srcLabel,
+                            phase = phase,
+                        })
                     end
                 end
             end
+        end
+    end
+
+    for _, src in ipairs(self:GetTooltipDataSources()) do
+        local dbName = self:GetSourceDBName(src, phase)
+        indexDB(dbName and _G[dbName], src.key, src.label)
+    end
+
+    -- Tooltip-enabled wishlists participate the same way — synthesize the
+    -- DB on the fly and flow it through the same indexer.
+    if self.GetTooltipEnabledWishlists then
+        for _, desc in ipairs(self:GetTooltipEnabledWishlists()) do
+            indexDB(self:BuildWishlistDB(desc.charKey, desc.wishlistName),
+                desc.key, desc.label)
         end
     end
 end

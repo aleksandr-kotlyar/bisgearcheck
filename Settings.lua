@@ -332,6 +332,103 @@ for i, srcInfo in ipairs(BiSGearCheck.DataSources) do
                            specsLabel = specsLabel, itemsLabel = itemsLabel, srcInfo = srcInfo }
 end
 
+-- Dynamic wishlist rows: one per compare-enabled wishlist, appended below
+-- the static published rows. Rebuilt each time the panel opens so newly
+-- toggled wishlists show up without requiring a reload.
+local wishlistRows = {}
+BiSGearCheck._wishlistSrcRowsRef = wishlistRows  -- consumed by ElvUISkin
+
+local STATIC_ROWS = #BiSGearCheck.DataSources
+
+local function RefreshWishlistSourceRows()
+    for _, r in ipairs(wishlistRows) do r.row:Hide() end
+    local lists = BiSGearCheck.GetAllEnabledWishlists
+        and BiSGearCheck:GetAllEnabledWishlists() or {}
+    for i, desc in ipairs(lists) do
+        local slot = wishlistRows[i]
+        if not slot then
+            local row = CreateFrame("Frame", nil, sourceTableWrapper)
+            row:SetSize(CONTENT_WIDTH, TABLE_ROW_HEIGHT)
+
+            local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            label:SetPoint("LEFT", row, "LEFT", COL_LABEL_X, 0)
+
+            local addonCB = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+            addonCB:SetSize(24, 24)
+            addonCB:SetPoint("LEFT", row, "LEFT", COL_ADDON_X + 8, 0)
+
+            local tooltipCB = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+            tooltipCB:SetSize(24, 24)
+            tooltipCB:SetPoint("LEFT", row, "LEFT", COL_TOOLTIP_X + 8, 0)
+
+            local specsLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            specsLabel:SetPoint("LEFT", row, "LEFT", COL_SPECS_X, 0)
+
+            local itemsLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            itemsLabel:SetPoint("LEFT", row, "LEFT", COL_ITEMS_X, 0)
+
+            wishlistRows[i] = {
+                row = row, label = label, addonCB = addonCB, tooltipCB = tooltipCB,
+                specsLabel = specsLabel, itemsLabel = itemsLabel,
+            }
+            slot = wishlistRows[i]
+        end
+        slot.row:Show()
+        slot.row:SetPoint("TOPLEFT", sourceTableWrapper, "TOPLEFT", 0,
+            -(STATIC_ROWS + i - 1) * TABLE_ROW_HEIGHT)
+        slot.label:SetText(desc.label)
+
+        -- Mirror the published rows' handlers, but against the wishlist
+        -- source key. OnSourceSettingsChanged picks up the flag change.
+        BiSGearCheck:EnsureSourceSettings()
+        local s = BiSGearCheckSaved.sourceSettings[desc.key]
+        slot.addonCB:SetChecked(s and s.addon ~= false)
+        slot.addonCB:SetScript("OnClick", function(self)
+            BiSGearCheck:EnsureSourceSettings()
+            local st = BiSGearCheckSaved.sourceSettings[desc.key]
+                    or { addon = false, tooltip = false }
+            st.addon = self:GetChecked() and true or false
+            BiSGearCheckSaved.sourceSettings[desc.key] = st
+            BiSGearCheck:OnSourceSettingsChanged()
+            BiSGearCheck:RefreshView()
+        end)
+        slot.tooltipCB:SetChecked(s and s.tooltip ~= false)
+        slot.tooltipCB:SetScript("OnClick", function(self)
+            BiSGearCheck:EnsureSourceSettings()
+            local st = BiSGearCheckSaved.sourceSettings[desc.key]
+                    or { addon = false, tooltip = false }
+            st.tooltip = self:GetChecked() and true or false
+            BiSGearCheckSaved.sourceSettings[desc.key] = st
+            BiSGearCheck:OnSourceSettingsChanged()
+        end)
+
+        -- Stats columns: count classes / items from the synthesized DB
+        local db = BiSGearCheck:BuildWishlistDB(desc.charKey, desc.wishlistName)
+        local specCount, uniqueItems = 0, {}
+        if db then
+            for _, specData in pairs(db) do
+                if specData.slots then
+                    local any = false
+                    for _, items in pairs(specData.slots) do
+                        for _, itemID in ipairs(items) do
+                            uniqueItems[itemID] = true
+                            any = true
+                        end
+                    end
+                    if any then specCount = specCount + 1 end
+                end
+            end
+        end
+        local itemCount = 0
+        for _ in pairs(uniqueItems) do itemCount = itemCount + 1 end
+        slot.specsLabel:SetText(specCount > 0 and tostring(specCount) or "-")
+        slot.itemsLabel:SetText(itemCount > 0 and tostring(itemCount) or "-")
+    end
+    -- Grow the wrapper to fit both static + dynamic rows
+    sourceTableWrapper:SetHeight((STATIC_ROWS + #lists) * TABLE_ROW_HEIGHT)
+end
+BiSGearCheck.RefreshWishlistSourceRows = RefreshWishlistSourceRows
+
 -- Refresh spec/item counts for the current phase
 local function RefreshSourceStats()
     local phase = BiSGearCheck.phaseFilter or 1
@@ -358,6 +455,8 @@ local function RefreshSourceStats()
         rowData.specsLabel:SetText(specCount > 0 and tostring(specCount) or "-")
         rowData.itemsLabel:SetText(itemCount > 0 and tostring(itemCount) or "-")
     end
+    -- Rebuild wishlist rows too (they share the table)
+    RefreshWishlistSourceRows()
 end
 
 -- Initialize phase dropdown
@@ -589,45 +688,12 @@ inspectedNoData:SetTextColor(0.5, 0.5, 0.5)
 inspectedNoData:SetText("No inspected characters saved.")
 inspectedNoData:Hide()
 
--- ============================================================
--- Section: Raid Scanning
--- ============================================================
+-- Raid Scanning used to have its own filter checkboxes here (classic
+-- zones / PvP / World Boss). Those now share the Compare-tab flags under
+-- "Zone and Source Filters" above — one place to control whether PvP /
+-- World Boss / Classic items surface anywhere in the addon.
 
-local inspectSectionEnd = CreateSectionEnd(inspectedWrapper, 0)
-
-local raidHeader, raidLine = CreateSectionHeader(inspectSectionEnd, "Raid Scanning")
-
-local raidFilterNote = scrollChild:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-raidFilterNote:SetPoint("TOPLEFT", raidLine, "BOTTOMLEFT", 0, -6)
-raidFilterNote:SetWidth(CONTENT_WIDTH)
-raidFilterNote:SetJustifyH("LEFT")
-raidFilterNote:SetText(T.hex("settingsNote") .. "These filters apply to upgrade suggestions in the Raid tab.|r")
-
-local raidClassicCheck = CreateFrame("CheckButton", "BiSGearCheckSettingsRaidClassicZones", scrollChild, "UICheckButtonTemplate")
-raidClassicCheck:SetPoint("TOPLEFT", raidFilterNote, "BOTTOMLEFT", 0, -4)
-_G["BiSGearCheckSettingsRaidClassicZonesText"]:SetText("Include Classic zones (Molten Core, BWL, AQ, Naxx, etc.)")
-raidClassicCheck:SetScript("OnClick", function(self)
-    BiSGearCheckSaved.raidIncludeClassicZones = self:GetChecked() and true or false
-    BiSGearCheck:RefreshView()
-end)
-
-local raidPvpCheck = CreateFrame("CheckButton", "BiSGearCheckSettingsRaidIncludePvP", scrollChild, "UICheckButtonTemplate")
-raidPvpCheck:SetPoint("TOPLEFT", raidClassicCheck, "BOTTOMLEFT", 0, 0)
-_G["BiSGearCheckSettingsRaidIncludePvPText"]:SetText("Include PvP items (Honor, Arena, Marks)")
-raidPvpCheck:SetScript("OnClick", function(self)
-    BiSGearCheckSaved.raidIncludePvP = self:GetChecked() and true or false
-    BiSGearCheck:RefreshView()
-end)
-
-local raidWorldBossCheck = CreateFrame("CheckButton", "BiSGearCheckSettingsRaidIncludeWorldBoss", scrollChild, "UICheckButtonTemplate")
-raidWorldBossCheck:SetPoint("TOPLEFT", raidPvpCheck, "BOTTOMLEFT", 0, 0)
-_G["BiSGearCheckSettingsRaidIncludeWorldBossText"]:SetText("Include World Boss items (Doom Lord Kazzak, Doomwalker)")
-raidWorldBossCheck:SetScript("OnClick", function(self)
-    BiSGearCheckSaved.raidIncludeWorldBoss = self:GetChecked() and true or false
-    BiSGearCheck:RefreshView()
-end)
-
-local raidSectionEnd = CreateSectionEnd(raidWorldBossCheck, 0)
+local raidSectionEnd = CreateSectionEnd(inspectedWrapper, 0)
 
 -- ============================================================
 -- Section: Fonts & Textures (only if LibSharedMedia is available)
@@ -1034,6 +1100,10 @@ panel:SetScript("OnShow", function(self)
         row.tooltipCB:SetChecked(s and s.tooltip ~= false)
     end
 
+    -- Rebuild the wishlist rows — they come from a dynamic table (new ones
+    -- appear when Enable Compare is toggled on the Wishlists tab).
+    RefreshWishlistSourceRows()
+
     local minLevel = BiSGearCheckSaved.minCharLevel or 64
     levelSlider:SetValue(minLevel)
     levelValueText:SetText(tostring(minLevel))
@@ -1050,10 +1120,7 @@ panel:SetScript("OnShow", function(self)
     BiSGearCheck:RefreshInspectedList()
 
     -- Raid scan filter defaults
-    BiSGearCheck:EnsureRaidFilterSettings()
-    raidClassicCheck:SetChecked(BiSGearCheckSaved.raidIncludeClassicZones)
-    raidPvpCheck:SetChecked(BiSGearCheckSaved.raidIncludePvP)
-    raidWorldBossCheck:SetChecked(BiSGearCheckSaved.raidIncludeWorldBoss)
+    -- Raid filter checkboxes removed; raid honors the Compare-tab flags now.
 
     -- LSM dropdowns
     local fontDd = _G["BiSGearCheckSettingsFontDropdown"]

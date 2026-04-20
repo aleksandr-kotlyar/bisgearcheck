@@ -60,8 +60,19 @@ function BiSGearCheck:RenameWishlist(newName)
     local oldName = self.activeWishlist
     charData.wishlists[newName] = charData.wishlists[oldName]
     charData.wishlists[oldName] = nil
+    -- Carry the "Enable Compare" flag forward to the new name
+    if self.RenameWishlistFlags then
+        self:RenameWishlistFlags(self:GetViewingCharKey(), oldName, newName)
+    end
     self.activeWishlist = newName
     charData.activeWishlist = newName
+    -- Flip the active source key if it was pointing at the old name
+    if self.dataSource and self:IsWishlistSourceKey(self.dataSource) then
+        local ck, wn = self:ParseWishlistSourceKey(self.dataSource)
+        if ck == self:GetViewingCharKey() and wn == oldName then
+            self:SetDataSource(self:MakeWishlistSourceKey(ck, newName))
+        end
+    end
     return true
 end
 
@@ -73,12 +84,23 @@ function BiSGearCheck:DeleteWishlist()
     for _ in pairs(charData.wishlists) do count = count + 1 end
     if count <= 1 then return false end -- can't delete the last one
 
-    charData.wishlists[self.activeWishlist] = nil
+    local deleted = self.activeWishlist
+    charData.wishlists[deleted] = nil
+    if self.ClearWishlistFlags then
+        self:ClearWishlistFlags(self:GetViewingCharKey(), deleted)
+    end
     -- Switch to the first remaining wishlist
     for name, _ in pairs(charData.wishlists) do
         self.activeWishlist = name
         charData.activeWishlist = name
         break
+    end
+    -- If the deleted wishlist was the active compare source, fall back.
+    if self.dataSource and self:IsWishlistSourceKey(self.dataSource) then
+        local ck, wn = self:ParseWishlistSourceKey(self.dataSource)
+        if ck == self:GetViewingCharKey() and wn == deleted then
+            if self.OnSourceSettingsChanged then self:OnSourceSettingsChanged() end
+        end
     end
     return true
 end

@@ -22,38 +22,69 @@ BiSGearCheck.raidCollapsedChars = {}
 local SCAN_INTERVAL = 2.0
 local INSPECT_TIMEOUT = 5.0
 
--- ============================================================
--- RAID SOURCE FILTERS (separate from Compare tab filters)
--- ============================================================
-
--- Ensure raid filter defaults exist
-function BiSGearCheck:EnsureRaidFilterSettings()
-    if not BiSGearCheckSaved then return end
-    if BiSGearCheckSaved.raidIncludeClassicZones == nil then BiSGearCheckSaved.raidIncludeClassicZones = false end
-    if BiSGearCheckSaved.raidIncludePvP == nil then BiSGearCheckSaved.raidIncludePvP = false end
-    if BiSGearCheckSaved.raidIncludeWorldBoss == nil then BiSGearCheckSaved.raidIncludeWorldBoss = false end
+-- Return a copy of `bisItems` filtered down to what should actually count
+-- toward rank numbering in the raid scan.
+--   * Always drops phase-future items (content that doesn't exist yet).
+--   * Always drops items unavailable to the player's faction (RunComparison
+--     pre-filters these for Compare; raid scan mirrors that here).
+--   * When hideFilteredRanks ("Close Rank Gaps") is on, also drops
+--     source-filtered items (PvP, World Boss, Classic zones) so the
+--     equipped-item rank tag collapses around them.
+function BiSGearCheck:RaidVisibleBisItems(bisItems)
+    if not bisItems then return bisItems end
+    local phases = BiSGearCheckItemPhases
+    local currentPhase = self:GetCurrentGamePhase()
+    local hideFiltered = BiSGearCheckSaved and BiSGearCheckSaved.hideFilteredRanks
+    local out = {}
+    for _, id in ipairs(bisItems) do
+        local keep = true
+        if phases then
+            local p = phases[id] or 1
+            if p > currentPhase then keep = false end
+        end
+        if keep and not self:IsItemAvailableForFaction(id) then
+            keep = false
+        end
+        if keep and hideFiltered and self:IsItemFilteredByRaidSource(id) then
+            keep = false
+        end
+        if keep then out[#out + 1] = id end
+    end
+    return out
 end
 
--- Check if an item should be hidden by raid-specific source filters
+-- ============================================================
+-- RAID SOURCE FILTERS
+-- ============================================================
+--
+-- Honors the same PvP / World Boss / Classic flags as the Compare tab. If
+-- you've turned off World Boss items for your own comparisons, the raid
+-- scan shouldn't recommend them either. A separate parallel set of raid
+-- flags used to exist (raidIncludePvP / raidIncludeWorldBoss /
+-- raidIncludeClassicZones); those are obsolete — MigrateSavedVars wipes
+-- them so they don't sit as stale saved state.
+
 function BiSGearCheck:IsItemFilteredByRaidSource(itemID)
     if not BiSGearCheckSaved then return false end
-    self:EnsureRaidFilterSettings()
     local sourceInfo = BiSGearCheckSources and BiSGearCheckSources[itemID]
 
-    -- Classic zone filter — also catch items with no source that have classic-era IDs
-    if not BiSGearCheckSaved.raidIncludeClassicZones then
+    -- Classic zone filter — also catch items with no source that have
+    -- classic-era item IDs (raid-scan-specific heuristic for unknown
+    -- low-ID items, since we don't have source info for everything yet).
+    if BiSGearCheckSaved.includeClassicZones == false then
         if self:IsClassicZoneItem(itemID) then return true end
-        -- Items with no source info and low IDs are classic-era
         if not sourceInfo or not sourceInfo.source then
             if itemID and itemID < 23500 then return true end
         end
     end
 
-    -- PvP filter
-    if not BiSGearCheckSaved.raidIncludePvP then
+    if not BiSGearCheckSaved.includePvP then
         if sourceInfo then
             if sourceInfo.source == "PvP" then return true end
-            if sourceInfo.source == "Vendor & Rep" and sourceInfo.sourceType then
+            -- SourceDB mixes "Vendor", "Vendor & Rep", and occasionally
+            -- other source labels for honor/marks/arena items; don't
+            -- gate the sourceType check on a specific source value.
+            if sourceInfo.sourceType then
                 local st = sourceInfo.sourceType
                 if st:find("Honor") or st:find("Marks") or st:find("Arena") then
                     return true
@@ -62,8 +93,7 @@ function BiSGearCheck:IsItemFilteredByRaidSource(itemID)
         end
     end
 
-    -- World Boss filter
-    if not BiSGearCheckSaved.raidIncludeWorldBoss then
+    if not BiSGearCheckSaved.includeWorldBoss then
         if sourceInfo and sourceInfo.source == "World Boss" then return true end
     end
 
@@ -117,10 +147,15 @@ function BiSGearCheck:StartRaidScan()
 
     -- Include self in results (no inspect needed)
     if self.playerKey then
-        -- Always detect spec from talents for raid scan, ignoring the
-        -- Compare tab's manual spec selection
+        -- Prefer a fresh talent-based guess so the scan reflects what the
+        -- player is actually playing, ignoring any manual Compare-tab pick.
+        -- GuessSpec returns nil when talent data isn't available — in that
+        -- case keep the current self.selectedSpec rather than clobbering it
+        -- (otherwise AnalyzeCharacter would fall back to specs[1], which
+        -- surfaces as the wrong spec on the raid scan header).
         local savedSpec = self.selectedSpec
-        self.selectedSpec = self:GuessSpec()
+        local guess = self:GuessSpec()
+        if guess then self.selectedSpec = guess end
         self:SnapshotEquippedGear()
         self:AnalyzeCharacter(self.playerKey)
         self.selectedSpec = savedSpec
@@ -255,15 +290,25 @@ function BiSGearCheck:FinishRaidScan()
         self.raidCollapsedChars[charKey] = true
     end
 
-    -- Save results for persistence across /reload
+    -- Save results for persistence across /reload. Pinning the spec to the
+    -- scan entry (rather than re-deriving from charData.selectedSpec on
+    -- restore) means the UI reports the spec we actually scanned — even if
+    -- the player's saved spec later changes (respec, late-arriving talent
+    -- data correction, etc.).
     if not BiSGearCheckSaved then BiSGearCheckSaved = { characters = {} } end
     BiSGearCheckSaved.lastRaidScan = {
         time = time(),
-        charKeys = {},
+        entries = {},
         skipped = {},
+        -- charKeys kept for back-compat with older saved data; dropped
+        -- once the new `entries` format is written at least once.
+        charKeys = nil,
     }
-    for charKey in pairs(self.raidScanResults) do
-        BiSGearCheckSaved.lastRaidScan.charKeys[#BiSGearCheckSaved.lastRaidScan.charKeys + 1] = charKey
+    for charKey, result in pairs(self.raidScanResults) do
+        BiSGearCheckSaved.lastRaidScan.entries[#BiSGearCheckSaved.lastRaidScan.entries + 1] = {
+            charKey = charKey,
+            specKey = result.specKey,
+        }
     end
     for _, skip in ipairs(self.raidScanSkipped) do
         BiSGearCheckSaved.lastRaidScan.skipped[#BiSGearCheckSaved.lastRaidScan.skipped + 1] = skip
@@ -306,14 +351,18 @@ end
 -- CHARACTER ANALYSIS
 -- ============================================================
 
-function BiSGearCheck:AnalyzeCharacter(charKey)
+-- `pinnedSpec` (optional): the spec to analyze against, overriding the
+-- character's currently-saved selectedSpec. Used by RestoreLastRaidScan so
+-- scans keep the spec they were captured with even if the player's saved
+-- spec has since changed (respec, talent-data correction, etc.).
+function BiSGearCheck:AnalyzeCharacter(charKey, pinnedSpec)
     local charData = self:GetCharacterData(charKey)
     if not charData or not charData.equipped then return end
 
     local classToken = charData.class
     if not classToken then return end
 
-    local specKey = charData.selectedSpec
+    local specKey = pinnedSpec or charData.selectedSpec
     if not specKey then
         local specs = self.ClassSpecs[classToken]
         if specs and #specs > 0 then
@@ -325,13 +374,16 @@ function BiSGearCheck:AnalyzeCharacter(charKey)
     local totalIssueCount = 0
     local upgrades = {}
 
-    -- Build BiS rank lookup for this spec
+    -- Build BiS rank lookup for this spec. Filter phase-future items so
+    -- the rank tag reflects what's actually available now (not shifted
+    -- by items the player can't even obtain yet).
     local db = self:GetActiveDB()
     local bisRankBySlot = {}  -- bisRankBySlot[slotName][itemID] = rank
     if db and db[specKey] and db[specKey].slots then
         for sName, bisItems in pairs(db[specKey].slots) do
             bisRankBySlot[sName] = {}
-            for rank, bisID in ipairs(bisItems) do
+            local visible = self:RaidVisibleBisItems(bisItems)
+            for rank, bisID in ipairs(visible) do
                 bisRankBySlot[sName][bisID] = rank
             end
         end
@@ -384,6 +436,7 @@ function BiSGearCheck:AnalyzeCharacter(charKey)
         issues = issues,
         issueCount = totalIssueCount,
         upgrades = upgrades,
+        bisRankBySlot = bisRankBySlot,  -- consumed by UIRenderRaid to tag worn items
     }
 end
 
@@ -410,7 +463,9 @@ function BiSGearCheck:GetSlotUpgrades(charKey, slotName, specKey, maxCount)
     local candidates = {}
     do
         if db and db[specKey] and db[specKey].slots and db[specKey].slots[slotName] then
-            local bisItems = db[specKey].slots[slotName]
+            -- Same phase-future filter the rank lookup uses — keeps
+            -- upgrade rank numbers aligned with the equipped-item tag.
+            local bisItems = self:RaidVisibleBisItems(db[specKey].slots[slotName])
 
             -- Find the best equipped rank on this BiS list (for cutoff)
             local bestEquippedRank = 999
@@ -481,18 +536,31 @@ end
 -- RESTORE LAST SCAN
 -- ============================================================
 
--- Re-analyze saved raid scan results (called after /reload)
+-- Re-analyze saved raid scan results (called after /reload). Each entry
+-- carries its pinned specKey from scan time so restored analyses use the
+-- spec we told the user when they ran the scan, not whatever is in the
+-- character record today.
 function BiSGearCheck:RestoreLastRaidScan()
     if not BiSGearCheckSaved or not BiSGearCheckSaved.lastRaidScan then return end
 
     local lastScan = BiSGearCheckSaved.lastRaidScan
     wipe(self.raidScanResults)
 
-    -- Re-run analysis for each saved character key
-    for _, charKey in ipairs(lastScan.charKeys or {}) do
-        local charData = self:GetCharacterData(charKey)
-        if charData and charData.equipped then
-            self:AnalyzeCharacter(charKey)
+    -- Prefer the new `entries` format (pinned specs); fall back to the old
+    -- `charKeys` shape so saved scans from older versions still restore.
+    if lastScan.entries then
+        for _, entry in ipairs(lastScan.entries) do
+            local charData = self:GetCharacterData(entry.charKey)
+            if charData and charData.equipped then
+                self:AnalyzeCharacter(entry.charKey, entry.specKey)
+            end
+        end
+    else
+        for _, charKey in ipairs(lastScan.charKeys or {}) do
+            local charData = self:GetCharacterData(charKey)
+            if charData and charData.equipped then
+                self:AnalyzeCharacter(charKey)
+            end
         end
     end
 

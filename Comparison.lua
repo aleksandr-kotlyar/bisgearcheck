@@ -90,6 +90,22 @@ function BiSGearCheck:CompareSlot(slotName, bisItems)
     local invSlots = self.SlotToInvSlot[slotName]
     if not invSlots then return nil end
 
+    -- Drop items whose phase is beyond the current game phase. Those are
+    -- future content that doesn't exist yet — shouldn't contribute to
+    -- ranks, shouldn't appear as upgrades, shouldn't count as filtered.
+    local phases = BiSGearCheckItemPhases
+    local currentPhase = self:GetCurrentGamePhase()
+    if phases then
+        local visible = {}
+        for _, id in ipairs(bisItems) do
+            local p = phases[id] or 1
+            if p <= currentPhase then
+                visible[#visible + 1] = id
+            end
+        end
+        bisItems = visible
+    end
+
     local isDualSlot = (slotName == "Rings" or slotName == "Trinkets")
     local maxShow = isDualSlot and 10 or nil
 

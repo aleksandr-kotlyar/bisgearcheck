@@ -33,6 +33,7 @@ eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 eventFrame:RegisterEvent("ZONE_CHANGED")
 eventFrame:RegisterEvent("ZONE_CHANGED_INDOORS")
 eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+eventFrame:RegisterEvent("CHARACTER_POINTS_CHANGED")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_ENTERING_WORLD" then
@@ -70,6 +71,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         end
     elseif event == "ZONE_CHANGED_NEW_AREA" or event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" then
         BiSGearCheck:OnZoneChanged()
+    elseif event == "CHARACTER_POINTS_CHANGED" then
+        -- Fires when talent data arrives post-login (even if no actual
+        -- change) and on every respec. Re-guess so a spec that was saved
+        -- wrong (because talents hadn't loaded when the first guess ran)
+        -- self-corrects.
+        BiSGearCheck:OnTalentsChanged()
     end
 end)
 
@@ -410,6 +417,26 @@ function BiSGearCheck:Refresh()
     self:RefreshView()
 end
 
+-- CHARACTER_POINTS_CHANGED handler. Runs on respec and also once at login
+-- when talent data first resolves, so a guess made before that data was
+-- available self-corrects. Only overrides when the guess is confident
+-- (non-nil) and disagrees with the saved spec.
+function BiSGearCheck:OnTalentsChanged()
+    local guess = self:GuessSpec()
+    if not guess then return end
+    if self.selectedSpec == guess then return end
+    -- Prefer SetSpec so per-character saved vars update too
+    if self.SetSpec then
+        self:SetSpec(guess)
+    else
+        self.selectedSpec = guess
+        if BiSGearCheckChar then BiSGearCheckChar.selectedSpec = guess end
+    end
+    if self.mainFrame and self.mainFrame:IsShown() then
+        self:Refresh()
+    end
+end
+
 function BiSGearCheck:RefreshView()
     if not self.mainFrame then return end
     if self.viewMode == "wishlist" then
@@ -488,8 +515,15 @@ function BiSGearCheck:OnPhaseChanged()
     self:Refresh()
 end
 
--- Get the active BiS database based on selected data source and phase
+-- Get the active BiS database based on selected data source and phase.
+-- Wishlist sources synthesize a DB from the wishlist's items (all items,
+-- regardless of per-item specKey; class specs re-use the same slot lists).
 function BiSGearCheck:GetActiveDB()
+    if self:IsWishlistSourceKey(self.dataSource) then
+        local charKey, wlName = self:ParseWishlistSourceKey(self.dataSource)
+        if charKey and wlName then return self:BuildWishlistDB(charKey, wlName) end
+        return nil
+    end
     local phase = self.phaseFilter or 1
     for _, src in ipairs(self.DataSources) do
         if src.key == self.dataSource then

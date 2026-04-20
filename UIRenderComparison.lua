@@ -8,11 +8,16 @@ local T = BiSGearCheck.Theme
 -- When hideFilteredRanks is on, CompareSlot sets eq.effectiveRank to the
 -- item's rank among unfiltered items — so an equipped #2 with #1 filtered
 -- collapses to "BiS!" here without changing the underlying raw rank.
-local function rankStr(eq)
+--
+-- Dual slots (Rings, Trinkets) have two slots, so the top two BiS picks
+-- are both co-BiS — rank 2 there reads as "BiS2!" rather than "Rank 2".
+local function rankStr(eq, isDualSlot)
     local r = eq.effectiveRank or eq.rank
     if r then
         if r == 1 then
             return T.hex("rankBis") .. "BiS!|r"
+        elseif r == 2 and isDualSlot then
+            return T.hex("rankBis") .. "BiS2!|r"
         else
             return string.format(T.hex("rankText") .. "Rank %d|r", r)
         end
@@ -170,7 +175,7 @@ function BiSGearCheck:RenderSlotSection(parent, slotResult, yOffset, width)
         if eqLink then
             warnings, wrongEnchantID = self:GetEquipWarnings(eqLink, slotName, specKey)
         end
-        header.text:SetText(arrow .. T.hex("slotHeader") .. slotName .. ":|r " .. eqText .. " - " .. rankStr(eq))
+        header.text:SetText(arrow .. T.hex("slotHeader") .. slotName .. ":|r " .. eqText .. " - " .. rankStr(eq, isDualSlot))
         header._slotName = slotName
         header:EnableMouse(true)
         header:SetScript("OnMouseDown", self.OnSlotHeaderClick)
@@ -205,7 +210,27 @@ function BiSGearCheck:RenderSlotSection(parent, slotResult, yOffset, width)
         header:SetScript("OnMouseDown", self.OnSlotHeaderClick)
         yOffset = yOffset - self.SLOT_HEADER_HEIGHT
     else
-        -- Dual-slot: header then equipped items
+        -- Dual-slot: when collapsed, inline both equipped items on the
+        -- header so the summary isn't an empty "[+] Rings" row.
+        if isCollapsed and #slotResult.equipped > 0 then
+            local header = self:CreateRow(parent, yOffset, width)
+            local parts = {}
+            for _, eq in ipairs(slotResult.equipped) do
+                local lateLink = eq.link or GetInventoryItemLink("player", eq.invSlot)
+                local eqText = lateLink or ("Item #" .. eq.id)
+                parts[#parts + 1] = eqText .. " " .. rankStr(eq, isDualSlot)
+            end
+            header.text:SetText(arrow .. T.hex("slotHeader") .. slotName .. ":|r "
+                .. table.concat(parts, "  "))
+            header._slotName = slotName
+            header:EnableMouse(true)
+            header:SetScript("OnMouseDown", self.OnSlotHeaderClick)
+            yOffset = yOffset - self.SLOT_HEADER_HEIGHT
+            -- Upgrades section is skipped below via the `not isCollapsed` guard.
+            return yOffset
+        end
+
+        -- Expanded: header then equipped items on their own rows
         local header = self:CreateRow(parent, yOffset, width)
         header.text:SetText(arrow .. T.hex("slotHeader") .. slotName .. "|r")
         header._slotName = slotName
@@ -222,7 +247,7 @@ function BiSGearCheck:RenderSlotSection(parent, slotResult, yOffset, width)
                 if lateLink then
                     warnings, wrongEnchantID = self:GetEquipWarnings(lateLink, slotName, specKey)
                 end
-                row.text:SetText("  Equipped: " .. eqText .. " - " .. rankStr(eq))
+                row.text:SetText("  Equipped: " .. eqText .. " - " .. rankStr(eq, isDualSlot))
                 if lateLink then
                     row._itemLink = lateLink
                     row:EnableMouse(true)
@@ -261,6 +286,10 @@ function BiSGearCheck:RenderSlotSection(parent, slotResult, yOffset, width)
         local hiddenCounts = {}
         for _, upgrade in ipairs(slotResult.upgrades) do
             local filterReason = self:GetItemFilterReason(upgrade.id, self.zoneFilter)
+            -- Phase-future items (itemPhase > currentGamePhase) are dropped
+            -- at CompareSlot time, so any Phase reason we see here means
+            -- "item exists in-game but user's phase filter narrows past it"
+            -- — that's a legitimate user-chosen filter, count it.
             if filterReason then
                 hiddenCounts[filterReason] = (hiddenCounts[filterReason] or 0) + 1
             else
