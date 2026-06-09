@@ -5,6 +5,10 @@ Versioning: **MAJOR.MINOR.PATCH**
 - **MINOR** — New features or significant improvements
 - **PATCH** — Bug fixes, data corrections, small tweaks
 
+## v3.8.2
+
+- Current content phase is now Phase 2 by default.
+
 ## v3.8.1
 
 - Ring and trinket upgrades now appear correctly

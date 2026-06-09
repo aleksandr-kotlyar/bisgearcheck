@@ -275,9 +275,9 @@ function BiSGearCheck:Initialize()
         self.selectedSpec = self:GuessSpec()
     end
 
-    -- Force Phase 1 while phase selection is disabled
-    self.phaseFilter = 1
-    BiSGearCheckSaved.phaseFilter = 1
+    -- Force Phase 2 while phase selection is disabled
+    self.phaseFilter = 2
+    BiSGearCheckSaved.phaseFilter = 2
 
     -- Initialize data source settings and unload fully disabled sources
     self:EnsureSourceSettings()
