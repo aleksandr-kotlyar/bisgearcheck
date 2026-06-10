@@ -1051,6 +1051,7 @@ function BiSGearCheck:GetEquipWarnings(itemLink, slotName, specKey)
     local filledCount = 0
     local wrongGemCount = 0
     local lesserGemCount = 0
+    local uncachedGemCount = 0
     for i = 1, 4 do
         local gemID = gems[i]
         if gemID and gemID > 0 then
@@ -1063,6 +1064,7 @@ function BiSGearCheck:GetEquipWarnings(itemLink, slotName, specKey)
                     wrongGemCount = wrongGemCount + 1    -- White/Grey
                 end
             else
+                uncachedGemCount = uncachedGemCount + 1
                 if not self.pendingItems[gemID] then
                     self.pendingItems[gemID] = true
                     C_Item.RequestLoadItemDataByID(gemID)
@@ -1071,8 +1073,12 @@ function BiSGearCheck:GetEquipWarnings(itemLink, slotName, specKey)
         end
     end
 
-    -- Tooltip only shows unfilled sockets ("Red Socket", etc.)
+    -- Tooltip only shows unfilled sockets ("Red Socket", etc.) — but a
+    -- socket holding a gem the client hasn't cached renders the same
+    -- placeholder line. The link says those sockets are filled, so don't
+    -- report them as empty.
     local emptySockets = self:CountItemSockets(itemLink)
+    emptySockets = math.max(0, emptySockets - uncachedGemCount)
     if filledCount + emptySockets > 0 then
         if emptySockets > 0 then
             if emptySockets == 1 then

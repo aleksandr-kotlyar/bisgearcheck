@@ -445,6 +445,63 @@ function T.test_is_enchant_recommended_no_slot_mapping()
 end
 
 -- ============================================================
+-- TESTS: GetEquipWarnings (gem / socket checks)
+-- ============================================================
+
+local function gemmedLink(itemID, g1, g2, g3)
+    return string.format("|cffa335ee|Hitem:%d:0:%d:%d:%d:0|h[Test Item]|h|r",
+        itemID, g1 or 0, g2 or 0, g3 or 0)
+end
+
+local function hasWarning(warnings, text)
+    for _, w in ipairs(warnings) do
+        if w:find(text, 1, true) then return true end
+    end
+    return false
+end
+
+function T.test_equip_warnings_uncached_gems_not_counted_empty()
+    -- A socket holding a gem the client hasn't cached renders as an
+    -- unfilled placeholder line in the scan tooltip. The link says it's
+    -- filled — must not be reported as an empty socket.
+    BiSGearCheckEnchantsDB = {}
+    BiSGearCheck.pendingItems = {}
+    MockWoW.SetItemInfo(24027, { name = "Cached Gem", quality = 3 })
+    -- gems 35487/35488 deliberately not registered (uncached)
+    local orig = BiSGearCheck.CountItemSockets
+    BiSGearCheck.CountItemSockets = function() return 2 end
+    local warnings = BiSGearCheck:GetEquipWarnings(
+        gemmedLink(29515, 24027, 35487, 35488), "Chest", "WarriorFury")
+    BiSGearCheck.CountItemSockets = orig
+    assert_false(hasWarning(warnings, "Empty Socket"),
+        "uncached gems must not be reported as empty sockets")
+end
+
+function T.test_equip_warnings_true_empty_socket_still_flagged()
+    BiSGearCheckEnchantsDB = {}
+    BiSGearCheck.pendingItems = {}
+    MockWoW.SetItemInfo(24027, { name = "Cached Gem", quality = 3 })
+    local orig = BiSGearCheck.CountItemSockets
+    BiSGearCheck.CountItemSockets = function() return 1 end
+    local warnings = BiSGearCheck:GetEquipWarnings(
+        gemmedLink(29515, 24027), "Chest", "WarriorFury")
+    BiSGearCheck.CountItemSockets = orig
+    assert_true(hasWarning(warnings, "Empty Socket"))
+end
+
+function T.test_equip_warnings_lesser_gems_still_flagged()
+    BiSGearCheckEnchantsDB = {}
+    BiSGearCheck.pendingItems = {}
+    MockWoW.SetItemInfo(24028, { name = "Green Gem", quality = 2 })
+    local orig = BiSGearCheck.CountItemSockets
+    BiSGearCheck.CountItemSockets = function() return 0 end
+    local warnings = BiSGearCheck:GetEquipWarnings(
+        gemmedLink(29515, 24028), "Chest", "WarriorFury")
+    BiSGearCheck.CountItemSockets = orig
+    assert_true(hasWarning(warnings, "Lesser Gems"))
+end
+
+-- ============================================================
 -- TESTS: ItemMatchesZone
 -- ============================================================
 

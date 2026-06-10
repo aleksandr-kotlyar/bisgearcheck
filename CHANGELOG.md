@@ -12,6 +12,7 @@ Versioning: **MAJOR.MINOR.PATCH**
 - Refreshed ThatsMyBis community wishlist data — now reflects live Phase 2 wishlists, adds previously missing glove slots.
 - Fixed the Settings phase dropdown showing the wrong phase until the menu was clicked open.
 - Raid scans saved by older versions now re-guess each member's spec from their scanned gear when restored — previous versions often stamped raiders with the wrong spec.
+- Sockets filled with gems your game client hasn't seen yet (common with new Phase 2 gems on other players) are no longer reported as empty.
 
 ## v3.10.0
 
