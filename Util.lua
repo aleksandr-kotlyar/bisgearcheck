@@ -609,7 +609,7 @@ end
 -- ≤ currentGamePhase but > phaseFilter — count as filtered).
 --
 -- Bump this when a new content phase goes live on Anniversary.
-BiSGearCheck.CurrentGamePhase = 1
+BiSGearCheck.CurrentGamePhase = 2
 
 function BiSGearCheck:GetCurrentGamePhase()
     return self.CurrentGamePhase or 1

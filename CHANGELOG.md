@@ -8,6 +8,7 @@ Versioning: **MAJOR.MINOR.PATCH**
 ## v3.10.1
 
 - Current content phase is now Phase 2 by default.
+- Phase 2 items now actually appear in Compare and raid scans — the internal game-phase gate was still set to Phase 1 and silently dropped them.
 - Refreshed Wowhead BiS data with the latest Phase 2 guide updates, including Season 2 arena pieces.
 - Refreshed ThatsMyBis community wishlist data — now reflects live Phase 2 wishlists, adds previously missing glove slots.
 - WowTBC.gg Phase 2 lists are now full ranked lists (~12 items per slot) instead of only the single top pick.
