@@ -1042,10 +1042,17 @@ function T.test_restore_last_scan_repopulates_results_with_pinned_spec()
     assert_equal(1, #BiSGearCheck.raidScanSkipped)
 end
 
-function T.test_restore_last_scan_falls_back_to_legacy_charKeys_format()
-    -- Saved data from older versions had charKeys instead of entries.
-    -- Ensure those still load (falling back to charData.selectedSpec).
+function T.test_restore_last_scan_legacy_reguesses_spec_from_gear()
+    -- Saved data from older versions had charKeys instead of entries, with
+    -- specs recorded by a guesser that often fell through to the class's
+    -- first spec. Legacy restores re-guess from the gear snapshot.
     setupBaseState()
+    MockWoW.SetInspectTalents({})
+    local origDB = BiSGearCheckDB_WowTBCgg
+    BiSGearCheckDB_WowTBCgg = {
+        MageFire = { class = "MAGE", spec = "Fire",
+            slots = { Head = { 30000 } } },
+    }
     BiSGearCheckSaved.characters["Alice-TestRealm"] = {
         class = "MAGE", faction = "Alliance", level = 70,
         wishlists = { Default = {} }, selectedSpec = "MageFrost",
@@ -1059,7 +1066,26 @@ function T.test_restore_last_scan_falls_back_to_legacy_charKeys_format()
     BiSGearCheck:RestoreLastRaidScan()
     local result = BiSGearCheck.raidScanResults["Alice-TestRealm"]
     assert_not_nil(result)
-    assert_equal("MageFrost", result.specKey)
+    assert_equal("MageFire", result.specKey,
+        "legacy restore should re-guess from gear, not trust the stale record")
+    BiSGearCheckDB_WowTBCgg = origDB
+end
+
+function T.test_restore_last_scan_legacy_keeps_own_selected_spec()
+    -- The player's own spec choice is authoritative — never re-guessed.
+    setupBaseState()
+    MockWoW.SetInspectTalents({})
+    BiSGearCheckSaved.characters["TestChar-TestRealm"].equipped =
+        { Head = {{ id = 30000, link = mockLink(30000) }} }
+    BiSGearCheckSaved.lastRaidScan = {
+        time = os.time(),
+        charKeys = { "TestChar-TestRealm" },
+        skipped = {},
+    }
+    BiSGearCheck:RestoreLastRaidScan()
+    local result = BiSGearCheck.raidScanResults["TestChar-TestRealm"]
+    assert_not_nil(result)
+    assert_equal("WarriorFury", result.specKey)
 end
 
 function T.test_analyze_character_honors_pinned_spec_argument()

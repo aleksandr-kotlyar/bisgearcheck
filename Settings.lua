@@ -1089,10 +1089,17 @@ panel:SetScript("OnShow", function(self)
     if BiSGearCheckSaved.hideFilteredRanks == nil then BiSGearCheckSaved.hideFilteredRanks = false end
     hideFilteredCheck:SetChecked(BiSGearCheckSaved.hideFilteredRanks)
 
-    -- PHASE SELECTION DISABLED
-    -- local currentPhase = BiSGearCheckSaved.phaseFilter or 1
-    -- UIDropDownMenu_SetText(settingsPhaseDropdown, PHASE_OPTIONS[currentPhase + 1].label)
-    -- UIDropDownMenu_SetSelectedValue(settingsPhaseDropdown, currentPhase)
+    -- Sync the phase dropdown to the saved filter. The label set at file
+    -- load ran before SavedVariables existed, so without this the closed
+    -- dropdown can read "Phase 1" while the real filter is another phase.
+    local currentPhase = BiSGearCheckSaved.phaseFilter or 1
+    UIDropDownMenu_SetSelectedValue(settingsPhaseDropdown, currentPhase)
+    for _, opt in ipairs(PHASE_OPTIONS) do
+        if opt.value == currentPhase then
+            UIDropDownMenu_SetText(settingsPhaseDropdown, opt.label)
+            break
+        end
+    end
 
     for _, row in ipairs(sourceTableRows) do
         local s = BiSGearCheckSaved.sourceSettings[row.key]

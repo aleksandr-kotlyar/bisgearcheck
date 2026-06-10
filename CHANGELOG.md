@@ -10,6 +10,8 @@ Versioning: **MAJOR.MINOR.PATCH**
 - Current content phase is now Phase 2 by default.
 - Refreshed Wowhead BiS data with the latest Phase 2 guide updates, including Season 2 arena pieces.
 - Refreshed ThatsMyBis community wishlist data — now reflects live Phase 2 wishlists, adds previously missing glove slots.
+- Fixed the Settings phase dropdown showing the wrong phase until the menu was clicked open.
+- Raid scans saved by older versions now re-guess each member's spec from their scanned gear when restored — previous versions often stamped raiders with the wrong spec.
 
 ## v3.10.0
 

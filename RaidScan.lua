@@ -556,10 +556,18 @@ function BiSGearCheck:RestoreLastRaidScan()
             end
         end
     else
+        -- Legacy scans predate spec pinning AND the talent/gear guess, so
+        -- the recorded spec is often just the class's first spec. Re-guess
+        -- from the gear snapshot instead of trusting the stale record —
+        -- except the player's own character, whose choice is authoritative.
         for _, charKey in ipairs(lastScan.charKeys or {}) do
             local charData = self:GetCharacterData(charKey)
             if charData and charData.equipped then
-                self:AnalyzeCharacter(charKey)
+                local guess
+                if charKey ~= self.playerKey then
+                    guess = self:GuessSpecFromGear(charData.class, charData.equipped)
+                end
+                self:AnalyzeCharacter(charKey, guess)
             end
         end
     end
