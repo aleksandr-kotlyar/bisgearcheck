@@ -9,6 +9,7 @@ Versioning: **MAJOR.MINOR.PATCH**
 
 - Current content phase is now Phase 2 by default.
 - Refreshed Wowhead BiS data with the latest Phase 2 guide updates, including Season 2 arena pieces.
+- Refreshed ThatsMyBis community wishlist data — now reflects live Phase 2 wishlists, adds previously missing glove slots.
 
 ## v3.10.0
 
