@@ -1625,6 +1625,8 @@ BiSGearCheckSources = {
 [31991] = { name = "Merciless Gladiator's Kodohide Tunic" },
 [32014] = { name = "Gladiator's Maul", source = "PvP", sourceType = "Arena Season 1" },
 [32027] = { name = "Merciless Gladiator's Quickblade" },
+[32029] = { name = "Merciless Gladiator's Ringmail Armor" },
+[32031] = { name = "Merciless Gladiator's Ringmail Helm" },
 [32039] = { name = "Merciless Gladiator's Scaled Chestpiece" },
 [32041] = { name = "Merciless Gladiator's Scaled Helm" },
 [32043] = { name = "Merciless Gladiator's Scaled Shoulders" },

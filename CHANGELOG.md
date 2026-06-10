@@ -8,6 +8,7 @@ Versioning: **MAJOR.MINOR.PATCH**
 ## v3.10.1
 
 - Current content phase is now Phase 2 by default.
+- Refreshed Wowhead BiS data with the latest Phase 2 guide updates, including Season 2 arena pieces.
 
 ## v3.10.0
 
