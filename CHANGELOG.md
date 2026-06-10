@@ -12,6 +12,7 @@ Versioning: **MAJOR.MINOR.PATCH**
 - Refreshed Wowhead BiS data with the latest Phase 2 guide updates, including Season 2 arena pieces.
 - Refreshed ThatsMyBis community wishlist data — now reflects live Phase 2 wishlists, adds previously missing glove slots.
 - WowTBC.gg Phase 2 lists are now full ranked lists (~12 items per slot) instead of only the single top pick.
+- WoWSims Phase 2 data now covers all 23 simmed specs (was 5) — sourced from the WoWSims UI gear presets. Healer specs aren't simmed by WoWSims and remain empty for that source.
 - Fixed the Settings phase dropdown showing the wrong phase until the menu was clicked open.
 - Raid scans saved by older versions now re-guess each member's spec from their scanned gear when restored — previous versions often stamped raiders with the wrong spec.
 - Sockets filled with gems your game client hasn't seen yet (common with new Phase 2 gems on other players) are no longer reported as empty.
