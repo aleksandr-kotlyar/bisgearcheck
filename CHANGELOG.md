@@ -5,6 +5,10 @@ Versioning: **MAJOR.MINOR.PATCH**
 - **MINOR** — New features or significant improvements
 - **PATCH** — Bug fixes, data corrections, small tweaks
 
+## v3.10.1
+
+- Current content phase is now Phase 2 by default.
+
 ## v3.10.0
 
 - **Wishlists as comparison sources**: any wishlist can be opted in via a new "Enable Compare" checkbox on the Wishlists tab, making it selectable in the Compare-tab source dropdown (and optionally contributing to tooltips). Flags live in the same Data Sources settings table as published sources.
@@ -23,7 +27,6 @@ Versioning: **MAJOR.MINOR.PATCH**
 - Refreshed Wowhead BiS data: broader coverage in Phase 1 (~45% more items, including pre-raid and alt picks) and a complete Phase 2 list for every spec (previously sparse for several specs).
 - MH weapons equipped in your off-hand no longer show up as main-hand upgrades (and vice versa). Respects one-hand/off-hand handedness — shields and main-hand-only weapons are unaffected.
 - New setting "Close rank gaps when filtering": when a higher-ranked BiS item is filtered out (PvP, World Boss, Classic zones, phase, etc.), the next visible item is treated as BiS. Off by default.
-
 ## v3.8.1
 
 - Ring and trinket upgrades now appear correctly

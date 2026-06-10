@@ -5,7 +5,7 @@ BiSGearCheck = BiSGearCheck or {}
 local T = BiSGearCheck.Theme
 
 -- Current content phase on Anniversary servers (update when new phases launch)
-local CURRENT_CONTENT_PHASE = 1
+local CURRENT_CONTENT_PHASE = 2
 
 local PHASE_OPTIONS = {
     { value = 1, label = "Phase 1" },
