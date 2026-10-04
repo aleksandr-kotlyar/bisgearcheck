@@ -137,6 +137,7 @@ function BiSGearCheck:OnTooltipSetItem(tooltip)
             1.0, 0.82, 0.0,
             0, 1, 0.82
         )
+        BiSGearCheck.Theme.applyTooltipTextFont(tooltip, header)
         anyShown = true
 
         for _, entry in ipairs(group.entries) do

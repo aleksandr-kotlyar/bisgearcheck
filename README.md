@@ -128,7 +128,7 @@ No hard addon dependencies. The following libraries are bundled:
 ## Limitations
 
 - This addon is built for and tested on the **WoW TBC Anniversary** client only. BiS data sets are specific to this version.
-- All UI text and data is in **English only**. Support for other languages may come in the future.
+- UI labels and bundled data are in **English only**. Cyrillic wishlist and character names use the client's built-in Cyrillic font, preserving text size and styling; this does not translate the interface.
 - Spec detection is based on talent points and may guess wrong for hybrid specs or characters that haven't spent talent points.
 
 ## Installation

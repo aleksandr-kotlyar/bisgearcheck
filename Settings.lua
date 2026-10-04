@@ -376,6 +376,7 @@ local function RefreshWishlistSourceRows()
         slot.row:Show()
         slot.row:SetPoint("TOPLEFT", sourceTableWrapper, "TOPLEFT", 0,
             -(STATIC_ROWS + i - 1) * TABLE_ROW_HEIGHT)
+        T.watchTextFont(slot.label)
         slot.label:SetText(desc.label)
 
         -- Mirror the published rows' handlers, but against the wishlist

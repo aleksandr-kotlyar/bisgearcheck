@@ -155,7 +155,7 @@ function BiSGearCheck:SetupCharacterSelector(f)
                 BiSGearCheck:SetViewingCharacter(self.value)
             end
             info.notCheckable = true
-            UIDropDownMenu_AddButton(info, level)
+            T.addDropdownButton(info, level)
         end
     end
     UIDropDownMenu_Initialize(charDropdown, CharDropdownInit)
@@ -197,7 +197,7 @@ function BiSGearCheck:SetupSourceSpecDropdowns(f)
             BiSGearCheck:SetDataSource(self.value)
         end
         info.notCheckable = true
-        UIDropDownMenu_AddButton(info, level)
+        T.addDropdownButton(info, level)
     end
 
     local function SourceDropdownInit(self, level)
@@ -252,7 +252,7 @@ function BiSGearCheck:SetupSourceSpecDropdowns(f)
                     BiSGearCheck:SetSpec(self.value)
                 end
                 info.notCheckable = true
-                UIDropDownMenu_AddButton(info, level)
+                T.addDropdownButton(info, level)
             end
         end
     end
@@ -325,7 +325,7 @@ function BiSGearCheck:SetupCollapseControls(f)
                 BiSGearCheck:SetActiveWishlist(self.value)
             end
             info.notCheckable = true
-            UIDropDownMenu_AddButton(info, level)
+            T.addDropdownButton(info, level)
         end
     end
     UIDropDownMenu_Initialize(compareWLDropdown, CompareWLDropdownInit)
@@ -353,7 +353,7 @@ function BiSGearCheck:SetupCollapseControls(f)
             BiSGearCheck:RefreshView()
         end
         info.notCheckable = true
-        UIDropDownMenu_AddButton(info, level)
+        T.addDropdownButton(info, level)
 
         -- Build a set of zones that have items for the current spec
         local specKey = BiSGearCheck.viewMode == "bislist" and BiSGearCheck.bislistSpec or BiSGearCheck.selectedSpec
@@ -374,7 +374,7 @@ function BiSGearCheck:SetupCollapseControls(f)
             hdr.text = category.label
             hdr.isTitle = true
             hdr.notCheckable = true
-            UIDropDownMenu_AddButton(hdr, level)
+            T.addDropdownButton(hdr, level)
 
             for _, zone in ipairs(category.zones) do
                 local zInfo = UIDropDownMenu_CreateInfo()
@@ -391,7 +391,7 @@ function BiSGearCheck:SetupCollapseControls(f)
                     BiSGearCheck:RefreshView()
                 end
                 zInfo.notCheckable = true
-                UIDropDownMenu_AddButton(zInfo, level)
+                T.addDropdownButton(zInfo, level)
             end
         end
     end
@@ -431,7 +431,7 @@ function BiSGearCheck:SetupBisListBar(f)
             BiSGearCheck:SetDataSource(self.value)
         end
         info.notCheckable = true
-        UIDropDownMenu_AddButton(info, level)
+        T.addDropdownButton(info, level)
     end
 
     local function BislistSourceInit(self, level)
@@ -485,7 +485,7 @@ function BiSGearCheck:SetupBisListBar(f)
                 end
                 hdr.isTitle = true
                 hdr.notCheckable = true
-                UIDropDownMenu_AddButton(hdr, level)
+                T.addDropdownButton(hdr, level)
 
                 for _, specInfo in ipairs(specs) do
                     if db[specInfo.key] then
@@ -499,7 +499,7 @@ function BiSGearCheck:SetupBisListBar(f)
                             BiSGearCheck:RefreshView()
                         end
                         sInfo.notCheckable = true
-                        UIDropDownMenu_AddButton(sInfo, level)
+                        T.addDropdownButton(sInfo, level)
                     end
                 end
             end

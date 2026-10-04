@@ -275,13 +275,100 @@ function Theme.getFont(sizeKey)
     return path, fonts[sizeField] or fonts.size
 end
 
---- Applies the theme font to a FontString. No-op if no custom font configured.
+--- Applies the theme font and enables Cyrillic fallback for dynamic text.
 --- sizeKey: "normal", "small", or "large"
 function Theme.applyFont(fontString, sizeKey)
     local path, size = Theme.getFont(sizeKey)
     if path then
         fontString:SetFont(path, size)
     end
+    Theme.watchTextFont(fontString)
+end
+
+-- Cyrillic names can be entered on an English client. Use the client's own
+-- Cyrillic face without changing shared GameFont objects or the Latin UI.
+local CYRILLIC_FONT = "Fonts\\FRIZQT___CYR.TTF"
+local originalTextFonts = setmetatable({}, { __mode = "k" })
+local watchedText = setmetatable({}, { __mode = "k" })
+
+local function hasCyrillic(text)
+    -- UTF-8 U+0400..U+04FF, including Russian Ё/ё and Ukrainian letters.
+    return type(text) == "string" and text:find("[\208-\211][\128-\191]")
+end
+
+function Theme.applyTextFont(region, text)
+    local path, size, flags = region:GetFont()
+    if not path then return end
+    if hasCyrillic(text) then
+        if path ~= CYRILLIC_FONT then
+            originalTextFonts[region] = { path, size, flags }
+            region:SetFont(CYRILLIC_FONT, size, flags)
+        end
+    else
+        local original = originalTextFonts[region]
+        if original and path == CYRILLIC_FONT then
+            region:SetFont(original[1], original[2], original[3])
+        end
+        originalTextFonts[region] = nil
+    end
+end
+
+-- Rows and dropdown labels are reused and usually receive text after creation.
+function Theme.watchTextFont(region)
+    if not watchedText[region] then
+        watchedText[region] = true
+        hooksecurefunc(region, "SetText", function(self)
+            Theme.applyTextFont(self, self:GetText())
+        end)
+    end
+    Theme.applyTextFont(region, region:GetText())
+end
+
+-- UIDropDownMenu reuses buttons across addons. It resets all three state fonts
+-- for each text entry; use private copies so later menus retain their fonts.
+local dropdownFonts, dropdownFontCount = {}, 0
+function Theme.addDropdownButton(info, level)
+    UIDropDownMenu_AddButton(info, level)
+    if not hasCyrillic(info.text) then return end
+    local list = _G["DropDownList" .. (level or 1)]
+    local button = list and _G[list:GetName() .. "Button" .. list.numButtons]
+    if not button then return end
+    for _, state in ipairs({ "Normal", "Highlight", "Disabled" }) do
+        local original = button["Get" .. state .. "FontObject"](button)
+        local font = dropdownFonts[original]
+        if not font then
+            dropdownFontCount = dropdownFontCount + 1
+            font = CreateFont("BiSGearCheckCyrillicDropdown" .. dropdownFontCount)
+            dropdownFonts[original] = font
+        end
+        font:SetFontObject(original)
+        local _, size, flags = original:GetFont()
+        font:SetFont(CYRILLIC_FONT, size, flags)
+        button["Set" .. state .. "FontObject"](button, font)
+    end
+    list.shouldRefresh = true
+end
+
+-- Only style the line BGC just appended, and restore it when the tooltip clears.
+local tooltipText = setmetatable({}, { __mode = "k" })
+function Theme.applyTooltipTextFont(tooltip, text)
+    local name = tooltip:GetName()
+    if not name or not hasCyrillic(text) then return end
+    local region = _G[name .. "TextLeft" .. tooltip:NumLines()]
+    if not region then return end
+    local regions = tooltipText[tooltip]
+    if not regions then
+        regions = {}
+        tooltipText[tooltip] = regions
+        tooltip:HookScript("OnTooltipCleared", function()
+            for textRegion in pairs(regions) do
+                Theme.applyTextFont(textRegion, nil)
+                regions[textRegion] = nil
+            end
+        end)
+    end
+    regions[region] = true
+    Theme.applyTextFont(region, text)
 end
 
 -- ============================================================

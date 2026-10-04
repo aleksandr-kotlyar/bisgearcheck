@@ -38,6 +38,8 @@ end
 local function makeFakeFontString()
     return {
         _font = nil, _size = nil, _flags = nil,
+        GetFont = function(self) return self._font, self._size, self._flags end,
+        GetText = function() return "English label" end,
         SetFont = function(self, path, size, flags)
             self._font = path
             self._size = size

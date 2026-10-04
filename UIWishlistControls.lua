@@ -93,7 +93,7 @@ function BiSGearCheck:SetupWishlistFilterBar(f)
             BiSGearCheck:RefreshView()
         end
         info.notCheckable = true
-        UIDropDownMenu_AddButton(info, level)
+        T.addDropdownButton(info, level)
 
         -- Categorized zones with dividers
         for catIdx, category in ipairs(BiSGearCheck.ZoneCategories) do
@@ -102,7 +102,7 @@ function BiSGearCheck:SetupWishlistFilterBar(f)
             hdr.text = category.label
             hdr.isTitle = true
             hdr.notCheckable = true
-            UIDropDownMenu_AddButton(hdr, level)
+            T.addDropdownButton(hdr, level)
 
             -- Zone entries in this category
             for _, zone in ipairs(category.zones) do
@@ -121,7 +121,7 @@ function BiSGearCheck:SetupWishlistFilterBar(f)
                     BiSGearCheck:RefreshView()
                 end
                 zInfo.notCheckable = true
-                UIDropDownMenu_AddButton(zInfo, level)
+                T.addDropdownButton(zInfo, level)
             end
         end
     end
@@ -201,6 +201,10 @@ local function buildRenameDialog()
     nameBox:SetPoint("LEFT", nameLabel, "RIGHT", 14, 0)
     nameBox:SetAutoFocus(false)
     nameBox:SetMaxLetters(40)
+    T.applyFont(nameBox, "normal")
+    nameBox:HookScript("OnTextChanged", function(self)
+        T.applyTextFont(self, self:GetText())
+    end)
     f.nameBox = nameBox
 
     local specLabel = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -216,6 +220,7 @@ local function buildRenameDialog()
     errorLabel:SetPoint("BOTTOM", 0, 44)
     errorLabel:SetTextColor(1, 0.3, 0.3)
     errorLabel:SetText("")
+    T.watchTextFont(errorLabel)
     f.errorLabel = errorLabel
 
     local okBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -271,7 +276,7 @@ function BiSGearCheck:ShowWishlistRenameDialog()
             f._specValue = nil
             refreshSpecDropdownLabel(f, f._origCharKey, f._origName)
         end
-        UIDropDownMenu_AddButton(auto, level)
+        T.addDropdownButton(auto, level)
         for _, spec in ipairs(specs) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = spec.label
@@ -281,7 +286,7 @@ function BiSGearCheck:ShowWishlistRenameDialog()
                 f._specValue = spec.key
                 refreshSpecDropdownLabel(f, f._origCharKey, f._origName)
             end
-            UIDropDownMenu_AddButton(info, level)
+            T.addDropdownButton(info, level)
         end
     end)
     refreshSpecDropdownLabel(f, charKey, wishlistName)
@@ -331,7 +336,7 @@ function BiSGearCheck:SetupWishlistSelectorBar(f)
                 BiSGearCheck:SetActiveWishlist(self.value)
             end
             info.notCheckable = true
-            UIDropDownMenu_AddButton(info, level)
+            T.addDropdownButton(info, level)
         end
     end
     UIDropDownMenu_Initialize(wlNameDropdown, WLNameDropdownInit)
